@@ -3,6 +3,7 @@ var possible_loss = -50;
 var current_time = new Date();
 var current_day = current_time.getDay();
 var hour_prices = [];
+var trend_analytics = [];
 var current_hour = current_time.getHours();
 var current_key;
 
@@ -132,13 +133,15 @@ function execute_action() {
 	trend_stability = 0; // 0 - Neutral; > 0 - Stable; < 0 - Unstable;
 
 	analysis = [];
+	stop_count_hours = 5;
 
-	for ( count_hours = 1; count_hours <= 5; count_hours++ ) {
+	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
 		date_before.setHours( date_before.getHours() - count_hours );
 		before_hour_key = parseInt( date_before.getFullYear() +""+ ( date_before.getMonth() + 1 ) +""+ date_before.getDate() +""+ date_before.getHours() );
 
 		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) { analysis.push( hour_prices[ before_hour_key ] ); }
+		else { stop_count_hours += 1; }
 	}
 
 	if ( analysis.length >= 5 ) {
@@ -152,6 +155,16 @@ function execute_action() {
 
 		// Set Stop Loss if there is an open position
 		stop_loss();
+
+		// Collect Trend Analytics - STATUS
+		if ( typeof( trend_analytics[ current_key ] ) == "undefined" ) {
+			trend_analytics[ current_key ] = {
+				status : trend_status,
+				stability : 0
+			}
+		} else {
+			trend_analytics[ current_key ].status = trend_status;
+		}
 
 		// Check Trend and make decision
 		if ( trend_status < 0 ) { // Sell Action
@@ -199,6 +212,11 @@ function calculate_trend_stability( analysis, status, current_info ) {
 			else { stability -= 1; }
 		}
 	}
+
+	// Collect Trend Analytics - STABILITY
+	trend_analytics[ current_key ].stability = stability;
+
+	return stability;
 }
 
 function execute_position( type = "", action ) {
