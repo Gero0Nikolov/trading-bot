@@ -22,10 +22,19 @@ middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options
 
 // Add Value to input
 document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).click();
-document.querySelector( 'div[data-code="NDAQ100MINI"] .quantity-list input' ).value = middle_purchase_option_value;
+document.querySelector( 'div[data-code="NDAQ100MINI"] .list_qty div[data-value="7"]' ).click();
 
 // Trigger Sell
 document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
 
 // Trigger Buy
 document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+
+// Check if there is opened position
+document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' );
+
+// Get Position Status
+parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
+
+// Close Position
+document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
