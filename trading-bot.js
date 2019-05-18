@@ -201,7 +201,7 @@ function calculate_trend_stability( analysis, status, current_info ) {
 	}
 }
 
-function execute_position( type = ""; action ) {
+function execute_position( type = "", action ) {
 	// Check if there is open position
 	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null ) { // No positions
 
