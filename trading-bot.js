@@ -43,16 +43,18 @@ function start_trading() {
 		today_day = today.getDay();
 		current_key = today.getFullYear() +""+ ( today.getMonth() + 1 ) +""+ today.getDate() +""+ today.getHours();
 
-		if ( today.getHours() < 23 && today_day == current_day ) {
-			calculate_prices();
-		} else if ( today.getHours() == 23 && today.getMinutes() >= 30 && today_day == current_day ) {
-			calculate_prices();
-		} else if ( today.getHours() == 0 && today.getMinutes() == 0 ) {
-			calculate_prices();
-		} else {
-			if ( today_day != current_day && today.getHours() >= 1 ) {
-				current_time = today;
-				current_day = today_day;
+		if ( today_day != 0 && today_day != 6 ) { // Market is closed during the WEEKEND - 0 = Sunday; 6 - Saturday;
+			if ( today.getHours() < 23 && today_day == current_day ) {
+				calculate_prices();
+			} else if ( today.getHours() == 23 && today.getMinutes() >= 30 && today_day == current_day ) {
+				calculate_prices();
+			} else if ( today.getHours() == 0 && today.getMinutes() == 0 ) {
+				calculate_prices();
+			} else {
+				if ( today_day != current_day && today.getHours() >= 1 ) {
+					current_time = today;
+					current_day = today_day;
+				}
 			}
 		}
 	}, 1000 );
