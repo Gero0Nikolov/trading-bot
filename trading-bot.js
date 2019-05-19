@@ -46,8 +46,6 @@ function start_trading() {
 		if ( today_day != 0 && today_day != 6 ) { // Market is closed during the WEEKEND - 0 = Sunday; 6 - Saturday;
 			if ( today.getHours() < 23 && today_day == current_day ) {
 				calculate_prices();
-			} else if ( today.getHours() == 0 && today.getMinutes() == 0 ) {
-				calculate_prices();
 			} else {
 				if ( today_day != current_day && today.getHours() >= 1 ) {
 					current_time = today;
@@ -65,7 +63,7 @@ function calculate_prices() {
 
 	// Send Price info to the Server
 	hour_inspector = today.getHours();
-	if ( hour_inspector != current_hour ) {
+	if ( hour_inspector != current_hour || ( today.getHours() == 22 && today.getMinutes() == 59 ) ) {
 		current_hour = hour_inspector;
 		last_hour_date = new Date();
 		last_hour_date.setHours( current_hour - 1 );
