@@ -6,6 +6,7 @@ var hour_prices = [];
 var trend_analytics = [];
 var current_hour = current_time.getHours();
 var current_key;
+var is_opened_position = false;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -221,7 +222,8 @@ function calculate_trend_stability( analysis, status, current_info ) {
 
 function execute_position( type = "", action ) {
 	// Check if there is open position
-	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null ) { // No positions
+	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null && is_opened_position == false ) { // No positions
+		is_opened_position = true;
 
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
 			document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
@@ -233,6 +235,7 @@ function execute_position( type = "", action ) {
 
 		if ( action == "close" ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			is_opened_position = false;
 		}
 
 	}

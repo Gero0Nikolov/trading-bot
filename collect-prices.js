@@ -38,3 +38,34 @@ parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-
 
 // Close Position
 document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+
+// Data Fill
+hour_prices[ 20195199 ] = {
+	sell: 749.29,
+	buy: 749.79,
+	actual: 749.29
+};
+
+hour_prices[ 20195198 ] = {
+	sell: 748.88,
+	buy: 749.38,
+	actual: 748.88
+};
+
+hour_prices[ 20195197 ] = {
+	sell: 749.42,
+	buy: 749.92,
+	actual: 749.42
+};
+
+hour_prices[ 20195196 ] = {
+	sell: 749.43,
+	buy: 749.93,
+	actual: 749.43
+};
+
+hour_prices[ 20195195 ] = {
+	sell: 749.44,
+	buy: 749.94,
+	actual: 749.44
+};
