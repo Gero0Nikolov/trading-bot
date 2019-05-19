@@ -45,7 +45,7 @@ function start_trading() {
 
 		if ( today.getHours() < 23 && today_day == current_day ) {
 			calculate_prices();
-		} else if ( today.getHours() == 23 && today.getMinutes() < 30 && today_day == current_day ) {
+		} else if ( today.getHours() == 23 && today.getMinutes() >= 30 && today_day == current_day ) {
 			calculate_prices();
 		} else {
 			if ( today_day != current_day && today.getHours() >= 1 ) {
