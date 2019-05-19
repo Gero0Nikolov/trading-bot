@@ -231,7 +231,11 @@ function calculate_trend_stability( analysis, status, current_info ) {
 
 function execute_position( type = "", action ) {
 	// Check if there is open position
-	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null && is_opened_position == false ) { // No positions
+	if (
+		document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null &&
+		is_opened_position == false &&
+		action == "open"
+	) { // No positions
 		is_opened_position = true;
 
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
@@ -242,7 +246,7 @@ function execute_position( type = "", action ) {
 
 	} else { // Position was opened already
 
-		if ( action == "close" ) { // Close Position
+		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
 		}
