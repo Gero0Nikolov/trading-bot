@@ -7,6 +7,7 @@ var trend_analytics = [];
 var current_hour = current_time.getHours();
 var current_key;
 var is_opened_position = false;
+var last_known_trend = 0;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -169,6 +170,7 @@ function execute_action() {
 
 		// Check Trend and make decision
 		if ( trend_status < 0 ) { // Sell Action
+			last_known_trend = trend_status;
 
 			// Check Trend Stability
 			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
@@ -179,6 +181,7 @@ function execute_action() {
 			}
 
 		} else if ( trend_status > 0 ) { // Buy Action
+			last_known_trend = trend_status;
 
 			// Check Trend Stability
 			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
@@ -188,7 +191,13 @@ function execute_action() {
 				execute_position( "", "close" );
 			}
 
-		} else { /* Trend is neutral; Don't do anything */ }
+		} else { // Trend is neutral; Take Action only for open positions
+			trend_stability = calculate_trend_stability( analysis, last_known_trend, hour_prices[ current_key ] );
+			if ( trend_stability > 0 ) { /* Trend is stable - Keep the position OPENED */ }
+			else if ( trend_stability < 0 ) { // Trend is unstable - CLOSE the position if there is one!
+				execute_position( "", "close" );
+			}
+		}
 	}
 }
 
