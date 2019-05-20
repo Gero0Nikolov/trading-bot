@@ -13,6 +13,7 @@ if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
 	xhttp.onreadystatechange = function() {
 		if ( this.readyState == 4 && this.status == 200 ) {
+			console.log( this.response );
 			result_ = JSON.parse( this.response );
 			if ( result_ != false ) {
 				for ( key in result_ ) {
@@ -127,7 +128,15 @@ function calculate_prices() {
 	document.querySelector( 'div[data-code="NDAQ100MINI"] .list_qty div[data-value="'+ middle_purchase_option_value +'"]' ).click();
 
 //**** BUY || SELL Action ****//
-	execute_action();
+	count_prices = 0;
+	for ( key in hour_prices ) {
+		count_prices += 1;
+
+		if ( count_prices == 5 ) {
+			break;
+			execute_action();
+		}
+	}
 }
 
 function execute_action() {
