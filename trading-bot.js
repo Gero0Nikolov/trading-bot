@@ -6,12 +6,11 @@ var hour_prices = [];
 var trend_analytics = [];
 var current_hour = current_time.getHours();
 var current_key;
-var is_opened_position = true;
+var is_opened_position = false;
 var last_known_trend = 0;
 var open_position;
 var open_position_direction = "";
-var min_difference = 0;
-var max_difference = 0;
+var possible_difference = 0;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -31,7 +30,7 @@ if ( hour_prices.length == 0 ) {
 					hour_prices[ info_.key ].actual = parseFloat( info_.actual );
 					hour_prices[ info_.key ].date = info_.date;
 				}
-			}			
+			}
 
 			start_trading();
 		}
@@ -99,13 +98,17 @@ function calculate_prices() {
 			date : calculation_time,
 			sell : sell_price,
 			buy : sell_price,
-			actual : sell_price
+			actual : sell_price,
+			highest_price : sell_price,
+			lowest_price : sell_price
 		};
 	} else {
 		hour_prices[ key ].date = calculation_time;
 		hour_prices[ key ].sell = sell_price;
 		hour_prices[ key ].buy = buy_price;
 		hour_prices[ key ].actual = sell_price;
+		hour_prices[ key ].highest_price = sell_price > hour_prices[ key ].highest_price ? sell_price : hour_prices[ key ].highest_price;
+		hour_prices[ key ].lowest_price = sell_price < hour_prices[ key ].lowest_price ? sell_price : hour_prices[ key ].lowest_price;
 	}
 
 //**** Prepare Action Execution ****//
@@ -135,12 +138,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 6 ) {
+		if ( count_prices == 10 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 6 ) {
+	if ( count_prices == 10 ) {
 		execute_action();
 	}
 }
@@ -150,7 +153,7 @@ function execute_action() {
 	trend_stability = 0; // 0 - Neutral; > 0 - Stable; < 0 - Unstable;
 
 	analysis = [];
-	stop_count_hours = 5;
+	stop_count_hours = 9;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -161,7 +164,7 @@ function execute_action() {
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 5 ) {
+	if ( analysis.length >= 9 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
@@ -250,32 +253,20 @@ function calculate_trend_stability( analysis, status, current_info ) {
 
 			if ( open_position_direction == "sell" ) {
 				if ( open_position.actual > current_info.actual ) {
-					if ( percent_difference >= min_difference ) {
+					possible_difference = possible_difference < 0.5 && percent_difference <= 0.5 ? percent_difference : 0.5;
+
+					if ( percent_difference >= possible_difference ) {
 						stability = 1;
-						min_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : min_difference );
-					} else {
-						stability = -1;
-					}
-				} else if ( open_position.actual < current_info.actual ) {
-					if ( percent_difference <= max_difference ) {
-						stability = 1;
-						max_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : max_difference );
 					} else {
 						stability = -1;
 					}
 				}
 			} else if ( open_position_direction == "buy" ) {
+				possible_difference = possible_difference < 0.5 && percent_difference <= 0.5 ? percent_difference : 0.5;
+
 				if ( open_position.actual < current_info.actual ) {
-					if ( percent_difference >= min_difference ) {
+					if ( percent_difference >= possible_difference ) {
 						stability = 1;
-						min_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : min_difference );
-					} else {
-						stability = -1;
-					}
-				} else if ( open_position.actual > current_info.actual ) {
-					if ( percent_difference <= max_difference ) {
-						stability = 1;
-						max_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : max_difference );
 					} else {
 						stability = -1;
 					}
@@ -317,8 +308,7 @@ function execute_position( type = "", action ) {
 			is_opened_position = false;
 			open_position = {};
 			open_position_direction = "";
-			min_difference = 0;
-			max_difference = 0;
+			possible_difference = 0;
 		}
 
 	}
