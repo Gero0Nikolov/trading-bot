@@ -6,8 +6,12 @@ var hour_prices = [];
 var trend_analytics = [];
 var current_hour = current_time.getHours();
 var current_key;
-var is_opened_position = false;
+var is_opened_position = true;
 var last_known_trend = 0;
+var open_position;
+var open_position_direction = "";
+var min_difference = 0;
+var max_difference = 0;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -27,7 +31,7 @@ if ( hour_prices.length == 0 ) {
 					hour_prices[ info_.key ].actual = parseFloat( info_.actual );
 					hour_prices[ info_.key ].date = info_.date;
 				}
-			}
+			}			
 
 			start_trading();
 		}
@@ -173,7 +177,8 @@ function execute_action() {
 		if ( typeof( trend_analytics[ current_key ] ) == "undefined" ) {
 			trend_analytics[ current_key ] = {
 				status : trend_status,
-				stability : 0
+				stability : 0,
+				percent_difference : 0
 			}
 		} else {
 			trend_analytics[ current_key ].status = trend_status;
@@ -234,6 +239,53 @@ function calculate_trend_stability( analysis, status, current_info ) {
 		}
 	}
 
+	// Calculate Percent Diff if Analysis says Trend is Stable
+	if ( stability > 0 ) {
+		current_info = hour_prices[ current_key ];
+
+		if ( is_opened_position == true ) {
+			price_difference = current_info.actual - open_position.actual;
+			price_difference = price_difference < 0 ? price_difference * (-1) : price_difference;
+			percent_difference = ( 100 * price_difference ) / ( ( current_info.actual + open_position.actual ) / 2 );
+
+			if ( open_position_direction == "sell" ) {
+				if ( open_position.actual > current_info.actual ) {
+					if ( percent_difference >= min_difference ) {
+						stability = 1;
+						min_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : min_difference );
+					} else {
+						stability = -1;
+					}
+				} else if ( open_position.actual < current_info.actual ) {
+					if ( percent_difference <= max_difference ) {
+						stability = 1;
+						max_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : max_difference );
+					} else {
+						stability = -1;
+					}
+				}
+			} else if ( open_position_direction == "buy" ) {
+				if ( open_position.actual < current_info.actual ) {
+					if ( percent_difference >= min_difference ) {
+						stability = 1;
+						min_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : min_difference );
+					} else {
+						stability = -1;
+					}
+				} else if ( open_position.actual > current_info.actual ) {
+					if ( percent_difference <= max_difference ) {
+						stability = 1;
+						max_difference = percent_difference <= 0.5 ? percent_difference : ( percent_difference > 0.5 ? 0.5 : max_difference );
+					} else {
+						stability = -1;
+					}
+				}
+			}
+
+			trend_analytics[ current_key ].percent_difference = percent_difference;
+		}
+	}
+
 	// Collect Trend Analytics - STABILITY
 	trend_analytics[ current_key ].stability = stability;
 
@@ -255,11 +307,18 @@ function execute_position( type = "", action ) {
 			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
 
+		open_position = hour_prices[ current_key ];
+		open_position_direction = type;
+
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
+			open_position = {};
+			open_position_direction = "";
+			min_difference = 0;
+			max_difference = 0;
 		}
 
 	}
