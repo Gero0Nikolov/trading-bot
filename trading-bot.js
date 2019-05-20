@@ -12,7 +12,7 @@ var last_known_trend = 0;
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
 	xhttp.onreadystatechange = function() {
-		if ( this.readyState == 4 && this.status == 200 ) {			
+		if ( this.readyState == 4 && this.status == 200 ) {
 			result_ = JSON.parse( this.response );
 			if ( result_ != false ) {
 				for ( key in result_ ) {
@@ -131,12 +131,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 5 ) {
+		if ( count_prices == 6 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 5 ) {
+	if ( count_prices == 6 ) {
 		execute_action();
 	}
 }
