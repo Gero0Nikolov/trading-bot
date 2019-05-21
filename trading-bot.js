@@ -10,6 +10,7 @@ var is_opened_position = false;
 var last_known_trend = 0;
 var open_position;
 var open_position_direction = "";
+var wait_before_opening = false;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -67,11 +68,12 @@ function calculate_prices() {
 
 	// Send Price info to the Server
 	hour_inspector = today.getHours();
-	if ( hour_inspector != current_hour || ( today.getHours() == 22 && today.getMinutes() == 59 ) ) {
+	if ( hour_inspector != current_hour ) {
 		current_hour = hour_inspector;
 		last_hour_date = new Date();
 		last_hour_date.setHours( current_hour - 1 );
 		last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+		wait_before_opening = false;
 
 		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
 			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
@@ -139,12 +141,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 10 ) {
+		if ( count_prices == 6 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 10 ) {
+	if ( count_prices == 6 ) {
 		execute_action();
 	}
 }
@@ -154,7 +156,7 @@ function execute_action() {
 	trend_stability = 0; // 0 - Neutral; > 0 - Stable; < 0 - Unstable;
 
 	analysis = [];
-	stop_count_hours = 9;
+	stop_count_hours = 5;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -165,7 +167,7 @@ function execute_action() {
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 9 ) {
+	if ( analysis.length >= 5 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
@@ -230,17 +232,44 @@ function stop_loss() {
 function calculate_trend_stability( analysis, status, current_info ) {
 	stability = 0;
 
-	for ( count_analysis = 0; count_analysis < analysis.length; count_analysis++ ) {
-		analysis_item = analysis[ count_analysis ];
+	if ( wait_before_opening == false ) {
+		if ( is_opened_position == false ) {
+			for ( count_analysis = 0; count_analysis < analysis.length; count_analysis++ ) {
+				analysis_item = analysis[ count_analysis ];
 
-		if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
-			if ( current_info.actual < analysis_item.actual ) { stability += 1; }
-			else { stability -= 1; }
-		} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
-			if ( current_info.actual > analysis_item.actual ) { stability += 1; }
-			else { stability -= 1; }
+				if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
+					if ( current_info.actual < analysis_item.actual ) { stability += 1; }
+					else { stability -= 1; }
+				} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
+					if ( current_info.actual > analysis_item.actual ) { stability += 1; }
+					else { stability -= 1; }
+				}
+			}
+		} else if ( is_opened_position == true ) {
+			one_hour_ago = analysis[ 0 ];
+			two_hours_ago = analysis[ 1 ];
+
+			if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
+				if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
+					stability = 1;
+				} else if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
+					stability = 1;
+				} else if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
+					stability = -1;
+					wait_before_opening = true;
+				}
+			} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
+				if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
+					stability = 1;
+				} else if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
+					stability = 1;
+				} else if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
+					stability = -1;
+					wait_before_opening = true;
+				}
+			}
 		}
-	}
+	} else if ( wait_before_opening == true ) { stability = -1; }
 
 	return stability;
 }
@@ -255,9 +284,9 @@ function execute_position( type = "", action ) {
 		is_opened_position = true;
 
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
-			//document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
+			document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
 		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
-			//document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
 
 		open_position = hour_prices[ current_key ];
@@ -266,7 +295,7 @@ function execute_position( type = "", action ) {
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
-			//document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
 			open_position = {};
 			open_position_direction = "";
