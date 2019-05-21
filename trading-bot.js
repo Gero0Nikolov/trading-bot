@@ -8,8 +8,6 @@ var current_hour = current_time.getHours();
 var current_key;
 var is_opened_position = false;
 var last_known_trend = 0;
-var open_position;
-var open_position_direction = "";
 var wait_before_opening = false;
 
 if ( hour_prices.length == 0 ) {
@@ -225,12 +223,16 @@ function execute_action() {
 function stop_loss() {
 	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) != null ) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
-		if ( position_status < possible_loss ) { document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click(); }
+		if ( position_status < possible_loss ) {
+			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			is_opened_position = false;
+			wait_before_opening = true;
+		}
 	}
 }
 
 function calculate_trend_stability( analysis, status, current_info ) {
-	stability = 0;
+	let stability = 0;
 
 	if ( wait_before_opening == false ) {
 		if ( is_opened_position == false ) {
@@ -271,6 +273,8 @@ function calculate_trend_stability( analysis, status, current_info ) {
 		}
 	} else if ( wait_before_opening == true ) { stability = -1; }
 
+	trend_analytics[ current_key ].stability = stability;
+
 	return stability;
 }
 
@@ -289,17 +293,11 @@ function execute_position( type = "", action ) {
 			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
 
-		open_position = hour_prices[ current_key ];
-		open_position_direction = type;
-
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
-			open_position = {};
-			open_position_direction = "";
-			possible_difference = 0;
 		}
 
 	}
