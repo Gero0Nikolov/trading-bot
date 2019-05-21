@@ -8,7 +8,8 @@ var current_hour = current_time.getHours();
 var current_key;
 var is_opened_position = false;
 var last_known_trend = 0;
-var wait_before_opening = false;
+var position_direction = "";
+var trend_during_opening = 0;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -71,7 +72,6 @@ function calculate_prices() {
 		last_hour_date = new Date();
 		last_hour_date.setHours( current_hour - 1 );
 		last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
-		wait_before_opening = false;
 
 		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
 			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
@@ -139,12 +139,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 6 ) {
+		if ( count_prices == 10 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 6 ) {
+	if ( count_prices == 10 ) {
 		execute_action();
 	}
 }
@@ -154,7 +154,7 @@ function execute_action() {
 	trend_stability = 0; // 0 - Neutral; > 0 - Stable; < 0 - Unstable;
 
 	analysis = [];
-	stop_count_hours = 5;
+	stop_count_hours = 9;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -165,7 +165,7 @@ function execute_action() {
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 5 ) {
+	if ( analysis.length >= 9 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
@@ -175,7 +175,7 @@ function execute_action() {
 		}
 
 		// Set Stop Loss if there is an open position
-		stop_loss();
+		stop_loss( analysis );
 
 		// Collect Trend Analytics - STATUS
 		if ( typeof( trend_analytics[ current_key ] ) == "undefined" ) {
@@ -187,6 +187,19 @@ function execute_action() {
 			trend_analytics[ current_key ].status = trend_status;
 		}
 
+		// Check if Trend in the current analysed period is about to change - OPENED POSITIONS ONLY
+		if ( is_opened_position == true ) {
+			if ( position_direction == "sell" ) { // Sell Position
+				if ( trend_status > trend_during_opening && trend_status > 0 ) {
+					execute_position( "", "close" );
+				}
+			} else if ( position_direction == "buy" ) { // Buy Position
+				if ( trend_status < trend_during_opening && trend_status < 0 ) {
+					execute_position( "", "close" );
+				}
+			}
+		}
+
 		// Check Trend and make decision
 		if ( trend_status < 0 ) { // Sell Action
 			last_known_trend = trend_status;
@@ -195,8 +208,6 @@ function execute_action() {
 			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
 			if ( trend_stability > 0 ) { // Trend is stable - OPEN Position
 				execute_position( "sell", "open" );
-			} else if ( trend_stability < 0 ) { // Trend is unstable - DON'T OPEN Position
-				execute_position( "", "close" );
 			}
 
 		} else if ( trend_status > 0 ) { // Buy Action
@@ -206,27 +217,38 @@ function execute_action() {
 			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
 			if ( trend_stability > 0 ) { // Trend is stable - OPEN Position
 				execute_position( "buy", "open" );
-			} else if ( trend_stability < 0 ) { // Trend is unstable - DON'T OPEN Position
-				execute_position( "", "close" );
 			}
 
-		} else { // Trend is neutral; Take Action only for open positions
-			trend_stability = calculate_trend_stability( analysis, last_known_trend, hour_prices[ current_key ] );
-			if ( trend_stability > 0 ) { /* Trend is stable - Keep the position OPENED */ }
-			else if ( trend_stability < 0 ) { // Trend is unstable - CLOSE the position if there is one!
-				execute_position( "", "close" );
-			}
 		}
 	}
 }
 
-function stop_loss() {
+function stop_loss( analysis ) {
 	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) != null ) {
-		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
-		if ( position_status < possible_loss ) {
+		// Find Lowest Price in the analysed period
+		close_price = 0;
+		for ( count_hours = 0; count_hours < analysis.length; count_hours++ ) {
+			if ( position_direction == "sell" ) {
+				close_price = close_price == 0 ? analysis[ count_hours ].highest_price : ( close_price < analysis[ count_hours ].highest_price ? analysis[ count_hours ].highest_price : close_price );
+			} else if ( position_direction == "buy" ) {
+				close_price = close_price == 0 ? analysis[ count_hours ].lowest_price : ( close_price > analysis[ count_hours ].lowest_price ? analysis[ count_hours ].lowest_price : close_price );
+			}
+		}
+
+		current_info = hour_prices[ current_key ];
+		close_flag = false;
+
+		if ( position_direction == "sell" ) {
+			close_flag = current_info.actual > close_price ? true : false;
+		} else if ( position_direction == "buy" ) {
+			close_flag = current_info.actual < close_price ? true : false;
+		}
+
+		if ( close_flag == true ) {
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
-			wait_before_opening = true;
+			position_direction = "";
+			trend_during_opening = 0;
 		}
 	}
 }
@@ -234,46 +256,35 @@ function stop_loss() {
 function calculate_trend_stability( analysis, status, current_info ) {
 	let stability = 0;
 
-	if ( wait_before_opening == false ) {
-		if ( is_opened_position == false ) {
-			for ( count_analysis = 0; count_analysis < analysis.length; count_analysis++ ) {
-				analysis_item = analysis[ count_analysis ];
+	for ( count_analysis = 0; count_analysis < analysis.length; count_analysis++ ) {
+		analysis_item = analysis[ count_analysis ];
 
-				if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
-					if ( current_info.actual < analysis_item.actual ) { stability += 1; }
-					else { stability -= 1; }
-				} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
-					if ( current_info.actual > analysis_item.actual ) { stability += 1; }
-					else { stability -= 1; }
-				}
-			}
-		} else if ( is_opened_position == true ) {
-			one_hour_ago = analysis[ 0 ];
-			two_hours_ago = analysis[ 1 ];
-
-			if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
-				if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
-					stability = 1;
-				} else if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
-					stability = 1;
-				} else if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
-					stability = -1;
-					wait_before_opening = true;
-				}
-			} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
-				if ( one_hour_ago.actual > two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
-					stability = 1;
-				} else if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual > one_hour_ago.actual ) {
-					stability = 1;
-				} else if ( one_hour_ago.actual < two_hours_ago.actual && current_info.actual < one_hour_ago.actual ) {
-					stability = -1;
-					wait_before_opening = true;
-				}
-			}
+		if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
+			if ( current_info.actual < analysis_item.actual ) { stability += 1; }
+			else { stability -= 1; }
+		} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
+			if ( current_info.actual > analysis_item.actual ) { stability += 1; }
+			else { stability -= 1; }
 		}
-	} else if ( wait_before_opening == true ) { stability = -1; }
+	}
 
-	trend_analytics[ current_key ].stability = stability;
+	// Check if Trend is in correction
+	one_hour_ago = analysis[ 0 ];
+	// two_hours_ago = analysis[ 1 ];
+	// one_hour_ago.actual > two_hours_ago.actual &&
+	// one_hour_ago.actual < two_hours_ago.actual &&
+
+	if ( status < 0 ) { // Trend is NEGATIVE - SELL Action
+		if ( current_info.actual > one_hour_ago.actual ) {
+			stability = -100;
+		}
+	} else if ( status > 0 ) { // Trend is POSITIVE - BUY Action
+		if ( current_info.actual < one_hour_ago.actual ) {
+			stability = -100;
+		}
+	}
+
+	trend_analytics[ current_key ].stability = stability; // IF STABILITY == 100 ==> TREND IS IN CORRECTION
 
 	return stability;
 }
@@ -285,19 +296,24 @@ function execute_position( type = "", action ) {
 		is_opened_position == false &&
 		action == "open"
 	) { // No positions
-		is_opened_position = true;
 
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
 			document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
+			trend_during_opening = -1;
 		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
 			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+			trend_during_opening = 1;
 		}
 
+		is_opened_position = true;
+		position_direction = type;
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
+			position_direction = "";
+			trend_during_opening = 0;
 		}
 
 	}
