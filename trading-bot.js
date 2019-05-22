@@ -10,6 +10,7 @@ var is_opened_position = false;
 var last_known_trend = 0;
 var position_direction = "";
 var trend_during_opening = 0;
+var market_closed = false;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -50,22 +51,24 @@ function start_trading() {
 		if ( today_day != 0 && today_day != 6 ) { // Market is closed during the WEEKEND - 0 = Sunday; 6 - Saturday;
 			if ( today.getHours() < 23 && today_day == current_day ) {
 				calculate_prices();
+			} else if ( today.getHours() == 23 && market_closed == false ) {
+				update_db();
 			} else {
 				if ( today_day != current_day && today.getHours() >= 1 ) {
 					current_time = today;
 					current_day = today_day;
+					market_closed = false;
 				}
 			}
 		}
 	}, 1000 );
 }
 
-function calculate_prices() {
-//**** Calculate Action ****//
-
+function update_db() {
 	today = new Date();
 
-	// Send Price info to the Server
+	if ( today.getHours() == 23 ) { market_closed = true; }
+
 	hour_inspector = today.getHours();
 	if ( hour_inspector != current_hour ) {
 		current_hour = hour_inspector;
@@ -87,6 +90,15 @@ function calculate_prices() {
 			xhttp.send( "action=store_data&last_hour="+ last_hour_info );
 		}
 	}
+}
+
+function calculate_prices() {
+//**** Calculate Action ****//
+
+	today = new Date();
+
+	// Send Price info to the Server
+	update_db();
 
 	sell_price = parseFloat( document.querySelector( 'div[data-code="NDAQ100MINI"] .tradebox-price-sell' ).innerText );
 	buy_price = parseFloat( document.querySelector( 'div[data-code="NDAQ100MINI"] .tradebox-price-buy' ).innerText );
@@ -154,14 +166,22 @@ function execute_action() {
 	trend_stability = 0; // 0 - Neutral; > 0 - Stable; < 0 - Unstable;
 
 	analysis = [];
+	stability_analysis = [];
 	stop_count_hours = 9;
+	stop_count_analysis = 5;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
 		date_before.setHours( date_before.getHours() - count_hours );
 		before_hour_key = parseInt( date_before.getFullYear() +""+ ( date_before.getMonth() + 1 ) +""+ date_before.getDate() +""+ date_before.getHours() );
 
-		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) { analysis.push( hour_prices[ before_hour_key ] ); }
+		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) {
+			analysis.push( hour_prices[ before_hour_key ] );
+
+			if ( count_hours <= stop_count_analysis ) {
+				stability_analysis.push( hour_prices[ before_hour_key ] );
+			}
+		}
 		else { stop_count_hours += 1; }
 	}
 
@@ -189,12 +209,21 @@ function execute_action() {
 
 		// Check if Trend in the current analysed period is about to change - OPENED POSITIONS ONLY
 		if ( is_opened_position == true ) {
+			trend_stability = calculate_trend_stability( stability_analysis, trend_status, hour_prices[ current_key ] );
+			position_status = get_position_status();
+
 			if ( position_direction == "sell" ) { // Sell Position
-				if ( trend_status > trend_during_opening && trend_status > 0 ) {
+				if (
+					( trend_status > trend_during_opening && trend_status > 0 ) ||
+					( trend_stability == -100 && position_status > 0 )
+				) {
 					execute_position( "", "close" );
 				}
 			} else if ( position_direction == "buy" ) { // Buy Position
-				if ( trend_status < trend_during_opening && trend_status < 0 ) {
+				if (
+					( trend_status < trend_during_opening && trend_status < 0 ) ||
+					( trend_stability == -100 && position_status > 0 )
+				) {
 					execute_position( "", "close" );
 				}
 			}
@@ -205,7 +234,7 @@ function execute_action() {
 			last_known_trend = trend_status;
 
 			// Check Trend Stability
-			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
+			trend_stability = calculate_trend_stability( stability_analysis, trend_status, hour_prices[ current_key ] );
 			if ( trend_stability > 0 ) { // Trend is stable - OPEN Position
 				execute_position( "sell", "open" );
 			}
@@ -214,11 +243,20 @@ function execute_action() {
 			last_known_trend = trend_status;
 
 			// Check Trend Stability
-			trend_stability = calculate_trend_stability( analysis, trend_status, hour_prices[ current_key ] );
+			trend_stability = calculate_trend_stability( stability_analysis, trend_status, hour_prices[ current_key ] );
 			if ( trend_stability > 0 ) { // Trend is stable - OPEN Position
 				execute_position( "buy", "open" );
 			}
 
+		} else {
+			trend_stability = calculate_trend_stability( stability_analysis, last_known_trend, hour_prices[ current_key ] );
+			if ( is_opened_position == true ) {
+				position_status = get_position_status();
+
+				if ( trend_stability == -100 && position_status > 0 ) {
+					execute_position( "", "close" );
+				}
+			}
 		}
 	}
 }
@@ -317,4 +355,14 @@ function execute_position( type = "", action ) {
 		}
 
 	}
+}
+
+function get_position_status() {
+	position_status = false;
+
+	if ( is_opened_position == true ) {
+		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
+	}
+
+	return position_status;
 }
