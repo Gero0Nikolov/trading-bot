@@ -1,7 +1,6 @@
 var host_url = "https://geronikolov.com/wp-admin/admin-ajax.php";
 var possible_loss = -50;
 var current_time = new Date();
-var current_day = current_time.getDay();
 var hour_prices = [];
 var trend_analytics = [];
 var current_hour = current_time.getHours();
@@ -10,7 +9,8 @@ var is_opened_position = false;
 var last_known_trend = 0;
 var position_direction = "";
 var trend_during_opening = 0;
-var market_closed = false;
+var warning_active = false;
+var warning_timer = 0;
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -46,19 +46,20 @@ function start_trading() {
 	setInterval( function(){
 		today = new Date();
 		today_day = today.getDay();
-		current_key = today.getFullYear() +""+ ( today.getMonth() + 1 ) +""+ today.getDate() +""+ today.getHours();
+		current_key = parseInt( today.getFullYear() +""+ ( today.getMonth() + 1 ) +""+ today.getDate() +""+ today.getHours() );
 
 		if ( today_day != 0 && today_day != 6 ) { // Market is closed during the WEEKEND - 0 = Sunday; 6 - Saturday;
-			if ( today.getHours() < 23 && today_day == current_day ) {
+			if ( document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН" ) {
 				calculate_prices();
-			} else if ( today.getHours() == 23 && market_closed == false ) {
-				update_db();
-			} else {
-				if ( today_day != current_day && today.getHours() >= 1 ) {
-					current_time = today;
-					current_day = today_day;
-					market_closed = false;
-				}
+				current_time = today;
+			}
+		}
+
+		if ( warning_active == true ) {
+			warning_timer += 1;
+
+			if ( warning_timer == 300 ) {
+				warning_active = false;
 			}
 		}
 	}, 1000 );
@@ -67,14 +68,22 @@ function start_trading() {
 function update_db() {
 	today = new Date();
 
-	if ( today.getHours() == 23 ) { market_closed = true; }
-
 	hour_inspector = today.getHours();
 	if ( hour_inspector != current_hour ) {
 		current_hour = hour_inspector;
-		last_hour_date = new Date();
-		last_hour_date.setHours( current_hour - 1 );
-		last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+
+		last_hour_updated = false;
+		count_hours = 0;
+
+		while ( last_hour_updated == false ) {
+			count_hours += 1;
+			last_hour_date = new Date();
+			last_hour_date.setHours( current_hour - count_hours );
+			last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+			if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
+				last_hour_updated = true;
+			}
+		}
 
 		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
 			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
@@ -140,7 +149,7 @@ function calculate_prices() {
 		}
 	}
 
-	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length / 2 ) + 1 ];
+	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 4 ) ];
 
 	// Add Value to input
 	document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).click();
@@ -335,23 +344,28 @@ function execute_position( type = "", action ) {
 		action == "open"
 	) { // No positions
 
-		if ( type == "sell" && action == "open" ) { // Open SELL Position
-			document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
-			trend_during_opening = -1;
-		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
-			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
-			trend_during_opening = 1;
+		if ( warning_active == false ) { // Check if Trend is in Correction
+			if ( type == "sell" && action == "open" ) { // Open SELL Position
+				document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
+				trend_during_opening = -1;
+			} else if ( type == "buy" && action == "open" ) { // Open BUY Position
+				document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+				trend_during_opening = 1;
+			}
+
+			is_opened_position = true;
+			position_direction = type;
 		}
 
-		is_opened_position = true;
-		position_direction = type;
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			warning_active = true;
 			is_opened_position = false;
 			position_direction = "";
 			trend_during_opening = 0;
+			warning_timer = 0;
 		}
 
 	}
@@ -360,7 +374,7 @@ function execute_position( type = "", action ) {
 function get_position_status() {
 	position_status = false;
 
-	if ( is_opened_position == true ) {
+	if ( is_opened_position == true && document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ) != null ) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
 	}
 
