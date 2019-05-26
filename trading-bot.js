@@ -160,12 +160,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 10 ) {
+		if ( count_prices == 6 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 10 ) {
+	if ( count_prices == 6 ) {
 		execute_action();
 	}
 }
@@ -176,7 +176,7 @@ function execute_action() {
 
 	analysis = [];
 	stability_analysis = [];
-	stop_count_hours = 9;
+	stop_count_hours = 5;
 	stop_count_analysis = 5;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
@@ -194,7 +194,7 @@ function execute_action() {
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 9 ) {
+	if ( analysis.length >= 5 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
