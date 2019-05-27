@@ -54,14 +54,6 @@ function start_trading() {
 				current_time = today;
 			}
 		}
-
-		if ( warning_active == true ) {
-			warning_timer += 1;
-
-			if ( warning_timer == 300 ) {
-				warning_active = false;
-			}
-		}
 	}, 1000 );
 }
 
@@ -72,32 +64,9 @@ function update_db() {
 	if ( hour_inspector != current_hour ) {
 		current_hour = hour_inspector;
 
+		warning_active = false;
 		last_hour_updated = false;
-		count_hours = 0;
-
-		while ( last_hour_updated == false ) {
-			count_hours += 1;
-			last_hour_date = new Date();
-			last_hour_date.setHours( current_hour - count_hours );
-			last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
-			if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
-				last_hour_updated = true;
-			}
-		}
-
-		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
-			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
-
-			var xhttp = new XMLHttpRequest();
-			xhttp.onreadystatechange = function() {
-				if ( this.readyState == 4 && this.status == 200 ) {
-					console.log( this.response );
-				}
-			};
-			xhttp.open( "POST", host_url, true );
-			xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-			xhttp.send( "action=store_data&last_hour="+ last_hour_info );
-		}
+		count_hours = 0;		
 	}
 }
 
@@ -160,12 +129,12 @@ function calculate_prices() {
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 6 ) {
+		if ( count_prices == 3 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 6 ) {
+	if ( count_prices == 3 ) {
 		execute_action();
 	}
 }
@@ -176,8 +145,8 @@ function execute_action() {
 
 	analysis = [];
 	stability_analysis = [];
-	stop_count_hours = 5;
-	stop_count_analysis = 5;
+	stop_count_hours = 3;
+	stop_count_analysis = 3;
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -194,7 +163,7 @@ function execute_action() {
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 5 ) {
+	if ( analysis.length >= 3 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
