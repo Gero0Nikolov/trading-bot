@@ -39,7 +39,7 @@ if ( hour_prices.length == 0 ) {
 	};
 	xhttp.open( "POST", host_url, true );
 	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-	xhttp.send( "action=get_data" );
+	xhttp.send( "action=get_data&name=NDAQ100MINI" );
 } else { start_trading(); }
 
 function start_trading() {
@@ -89,7 +89,7 @@ function update_db() {
 			};
 			xhttp.open( "POST", host_url, true );
 			xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-			xhttp.send( "action=store_data&last_hour="+ last_hour_info );
+			xhttp.send( "action=store_data&last_hour="+ last_hour_info +"&name=NDAQ100MINI" );
 		}
 	}
 }
@@ -169,8 +169,20 @@ function execute_action() {
 
 	analysis = [];
 	stability_analysis = [];
+	stop_loss_analysis = [];
 	stop_count_hours = 5;
-	stop_count_analysis = 5;
+	stop_loss_count_analysis = 24;
+
+	for ( count_hours = 1; count_hours <= stop_loss_count_analysis; count_hours++ ) {
+		date_before = new Date;
+		date_before.setHours( date_before.getHours() - count_hours );
+		before_hour_key = parseInt( date_before.getFullYear() +""+ ( date_before.getMonth() + 1 ) +""+ date_before.getDate() +""+ date_before.getHours() );
+
+		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) {
+			stop_loss_analysis.push( hour_prices[ before_hour_key ] );
+		}
+		else { stop_loss_count_analysis += 1; }
+	}
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -179,10 +191,7 @@ function execute_action() {
 
 		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) {
 			analysis.push( hour_prices[ before_hour_key ] );
-
-			if ( count_hours <= stop_count_analysis ) {
-				stability_analysis.push( hour_prices[ before_hour_key ] );
-			}
+			stability_analysis.push( hour_prices[ before_hour_key ] );
 		}
 		else { stop_count_hours += 1; }
 	}
@@ -197,7 +206,7 @@ function execute_action() {
 		}
 
 		// Set Stop Loss if there is an open position
-		stop_loss( analysis );
+		stop_loss( stop_loss_analysis );
 
 		// Collect Trend Analytics - STATUS
 		if ( typeof( trend_analytics[ current_key ] ) == "undefined" ) {

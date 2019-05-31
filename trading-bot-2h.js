@@ -11,6 +11,7 @@ var position_direction = "";
 var trend_during_opening = 0;
 var warning_active = false;
 var warning_timer = 0;
+var tool = "ETHUSD";
 
 if ( hour_prices.length == 0 ) {
 	var xhttp = new XMLHttpRequest();
@@ -39,7 +40,7 @@ if ( hour_prices.length == 0 ) {
 	};
 	xhttp.open( "POST", host_url, true );
 	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-	xhttp.send( "action=get_data" );
+	xhttp.send( "action=get_data&name="+ tool );
 } else { start_trading(); }
 
 function start_trading() {
@@ -66,7 +67,31 @@ function update_db() {
 
 		warning_active = false;
 		last_hour_updated = false;
-		count_hours = 0;		
+		count_hours = 0;
+
+		while ( last_hour_updated == false ) {
+			count_hours += 1;
+			last_hour_date = new Date();
+			last_hour_date.setHours( current_hour - count_hours );
+			last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+			if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
+				last_hour_updated = true;
+			}
+		}
+
+		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
+			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
+
+			var xhttp = new XMLHttpRequest();
+			xhttp.onreadystatechange = function() {
+				if ( this.readyState == 4 && this.status == 200 ) {
+					console.log( this.response );
+				}
+			};
+			xhttp.open( "POST", host_url, true );
+			xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
+			xhttp.send( "action=store_data&last_hour="+ last_hour_info +"&name="+ tool );
+		}
 	}
 }
 
@@ -78,8 +103,8 @@ function calculate_prices() {
 	// Send Price info to the Server
 	update_db();
 
-	sell_price = parseFloat( document.querySelector( 'div[data-code="NDAQ100MINI"] .tradebox-price-sell' ).innerText );
-	buy_price = parseFloat( document.querySelector( 'div[data-code="NDAQ100MINI"] .tradebox-price-buy' ).innerText );
+	sell_price = parseFloat( document.querySelector( 'div[data-code="'+ tool +'"] .tradebox-price-sell' ).innerText );
+	buy_price = parseFloat( document.querySelector( 'div[data-code="'+ tool +'"] .tradebox-price-buy' ).innerText );
 
 	key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() );
 	calculation_time = today.getFullYear() + '-' + ( today.getMonth() + 1 ) + '-' + today.getDate() + ' ' + today.getHours();
@@ -113,28 +138,28 @@ function calculate_prices() {
 	for ( key in purchase_options ) {
 		option_ = purchase_options[ key ];
 		if ( option_.localName == "div" ) {
-			value = parseInt( option_.innerText );
+			value = parseFloat( option_.innerText );
 			purchase_options_list.push( value );
 		}
 	}
 
-	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 4 ) ];
+	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 3 ) ];
 
 	// Add Value to input
 	document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).click();
-	document.querySelector( 'div[data-code="NDAQ100MINI"] .list_qty div[data-value="'+ middle_purchase_option_value +'"]' ).click();
+	document.querySelector( 'div[data-code="'+ tool +'"] .list_qty div[data-value="'+ middle_purchase_option_value +'"]' ).click();
 
 //**** BUY || SELL Action ****//
 	count_prices = 0;
 	for ( key in hour_prices ) {
 		count_prices += 1;
 
-		if ( count_prices == 3 ) {
+		if ( count_prices == 5 ) {
 			break;
 		}
 	}
 
-	if ( count_prices == 3 ) {
+	if ( count_prices == 5 ) {
 		execute_action();
 	}
 }
@@ -145,8 +170,21 @@ function execute_action() {
 
 	analysis = [];
 	stability_analysis = [];
-	stop_count_hours = 3;
-	stop_count_analysis = 3;
+	stop_loss_analysis = [];
+	stop_count_hours = 2;
+	stop_count_analysis = 2;
+	stop_loss_count_analysis = 4;
+
+	for ( count_hours = 1; count_hours <= stop_loss_count_analysis; count_hours++ ) {
+		date_before = new Date;
+		date_before.setHours( date_before.getHours() - count_hours );
+		before_hour_key = parseInt( date_before.getFullYear() +""+ ( date_before.getMonth() + 1 ) +""+ date_before.getDate() +""+ date_before.getHours() );
+
+		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) {
+			stop_loss_analysis.push( hour_prices[ before_hour_key ] );
+		}
+		else { stop_loss_count_analysis += 1; }
+	}
 
 	for ( count_hours = 1; count_hours <= stop_count_hours; count_hours++ ) {
 		date_before = new Date;
@@ -155,15 +193,12 @@ function execute_action() {
 
 		if ( typeof( hour_prices[ before_hour_key ] ) !== "undefined" ) {
 			analysis.push( hour_prices[ before_hour_key ] );
-
-			if ( count_hours <= stop_count_analysis ) {
-				stability_analysis.push( hour_prices[ before_hour_key ] );
-			}
+			stability_analysis.push( hour_prices[ before_hour_key ] );
 		}
 		else { stop_count_hours += 1; }
 	}
 
-	if ( analysis.length >= 3 ) {
+	if ( analysis.length >= 2 ) {
 		for ( count_analysis = 0; count_analysis < analysis.length - 1; count_analysis++ ) {
 			analysis_1 = analysis[ count_analysis ];
 			analysis_2 = analysis[ count_analysis + 1 ];
@@ -173,7 +208,7 @@ function execute_action() {
 		}
 
 		// Set Stop Loss if there is an open position
-		stop_loss( analysis );
+		stop_loss( stop_loss_analysis );
 
 		// Collect Trend Analytics - STATUS
 		if ( typeof( trend_analytics[ current_key ] ) == "undefined" ) {
@@ -240,7 +275,7 @@ function execute_action() {
 }
 
 function stop_loss( analysis ) {
-	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) != null ) {
+	if ( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"]' ) != null ) {
 		// Find Lowest Price in the analysed period
 		close_price = 0;
 		for ( count_hours = 0; count_hours < analysis.length; count_hours++ ) {
@@ -261,7 +296,7 @@ function stop_loss( analysis ) {
 		}
 
 		if ( close_flag == true ) {
-			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"] [data-column-id="close"]' ).click();
 			is_opened_position = false;
 			position_direction = "";
 			trend_during_opening = 0;
@@ -308,7 +343,7 @@ function calculate_trend_stability( analysis, status, current_info ) {
 function execute_position( type = "", action ) {
 	// Check if there is open position
 	if (
-		document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"]' ) == null &&
+		document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"]' ) == null &&
 		is_opened_position == false &&
 		action == "open"
 	) { // No positions
@@ -329,7 +364,7 @@ function execute_position( type = "", action ) {
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
-			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="close"]' ).click();
+			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"] [data-column-id="close"]' ).click();
 			warning_active = true;
 			is_opened_position = false;
 			position_direction = "";
@@ -343,8 +378,8 @@ function execute_position( type = "", action ) {
 function get_position_status() {
 	position_status = false;
 
-	if ( is_opened_position == true && document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ) != null ) {
-		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="NDAQ100MINI"] [data-column-id="ppl"]' ).innerText );
+	if ( is_opened_position == true && document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"] [data-column-id="ppl"]' ) != null ) {
+		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tool +'"] [data-column-id="ppl"]' ).innerText );
 	}
 
 	return position_status;
