@@ -6,8 +6,11 @@ var current_key;
 var is_opened_position = false;
 var position_type = "";
 var open_position_interval = 0;
+var open_position_price = 0;
 
-var tool_ = "BTCUSD";
+//var tool_ = "BTCUSD";
+var tool_ = "NDAQ100";
+
 var tools_ = {
 	"BTCUSD" : {
 		clean_tool_name : "BTCUSD",
@@ -63,11 +66,9 @@ function start_trading() {
 
 		//TODO: today_day != 0 && today_day != 6 - Revert for NDAQ100
 
-		if ( true ) { // Market is closed during the WEEKEND - 0 = Sunday; 6 - Saturday;
-			if ( document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН" ) {
-				calculate_prices();
-				current_time = today;
-			}
+		if ( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН" ) {
+			calculate_prices();
+			current_time = today;
 		}
 	}, 1000 );
 }
@@ -145,10 +146,10 @@ function calculate_prices() {
 //**** Prepare Action Execution ****//
 
 	// Get Purchase List
-	document.querySelector( '[data-dojo-attach-point="dropdownNode"]' ).click();
+	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="dropdownNode"]' ).click();
 
 	// Collect Purchase List
-	purchase_options = document.querySelector( 'div[data-dojo-attach-point="quantityListNode"]' ).children;
+	purchase_options = document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] div[data-dojo-attach-point="quantityListNode"]' ).children;
 	purchase_options_list = [];
 	for ( key in purchase_options ) {
 		option_ = purchase_options[ key ];
@@ -161,7 +162,7 @@ function calculate_prices() {
 	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 4 ) ];
 
 	// Add Value to input
-	document.querySelector( '[data-dojo-attach-point="placeholderNode"]' ).click();
+	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).click();
 	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .list_qty div[data-value="'+ middle_purchase_option_value +'"]' ).click();
 
 //**** BUY || SELL Action ****//
@@ -174,11 +175,11 @@ function slice_action() {
 	// Find hour direction
 	if ( hour_.opening > hour_.actual ) { // Negative
 		if ( hour_.opening - hour_.actual >= tools_[ tool_ ].opening_position_movement ) {
-			execute_action( "sell", "open" );
+			execute_position( "sell", "open" );
 		}
 	} else if ( hour_.opening < hour_.actual )  { // Positive
 		if ( hour_.actual - hour_.opening >= tools_[ tool_ ].opening_position_movement ) {
-			execute_action( "buy", "open" );
+			execute_position( "buy", "open" );
 		}
 	}
 }
@@ -192,11 +193,12 @@ function execute_position( type = "", action ) {
 	) { // No positions
 
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
-			document.querySelector( '[data-dojo-attach-point="inputSellButtonNode"]' ).click();
+			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
 		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
-			document.querySelector( '[data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
 
+		open_position_price = hour_prices[ current_key ].actual;
 		is_opened_position = true;
 		position_type = type;
 
@@ -204,6 +206,7 @@ function execute_position( type = "", action ) {
 			take_profit();
 			stop_loss();
 		}, 1000 );
+
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
@@ -211,6 +214,7 @@ function execute_position( type = "", action ) {
 			clearInterval( open_position_interval );
 			is_opened_position = false;
 			position_type = "";
+			open_position_price = 0;
 		}
 
 	}
@@ -219,13 +223,16 @@ function execute_position( type = "", action ) {
 function take_profit() {
 	let hour_ = hour_prices[ current_key ];
 
-	if ( position_type == "sell" ) {
-		if ( hour_.actual - hour_.lowest_price > tools_[ tool_ ].take_profit_movement ) {
-			execute_position( "", "close" );
-		}
-	} else if ( position_type == "buy" ) {
-		if ( hour_.highest_price - hour_.actual > tools_[ tool_ ].take_profit_movement ) {
-			execute_position( "", "close" );
+	if ( is_profit() ) {
+		if ( position_type == "sell" ) {
+			if (
+				hour_.actual - hour_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+				execute_position( "", "close" );
+			}
+		} else if ( position_type == "buy" ) {
+			if ( hour_.highest_price - hour_.actual >= tools_[ tool_ ].take_profit_movement ) {
+				execute_position( "", "close" );
+			}
 		}
 	}
 }
@@ -234,12 +241,20 @@ function stop_loss() {
 	let hour_ = hour_prices[ current_key ];
 
 	if ( position_type == "sell" ) {
-		if ( hour_.actual - hour_.lowest_price > tools_[ tool_ ].stop_loss_movement ) {
+		if ( hour_.actual - open_position_price >= tools_[ tool_ ].stop_loss_movement ) {
 			execute_position( "", "close" );
 		}
 	} else if ( position_type == "buy" ) {
-		if ( hour_.highest_price - hour_.actual > tools_[ tool_ ].stop_loss_movement ) {
+		if ( open_position_price - hour_.actual >= tools_[ tool_ ].stop_loss_movement ) {
 			execute_position( "", "close" );
 		}
 	}
+}
+
+function is_profit() {
+	position_status = false;
+	if ( is_opened_position == true ) {
+		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
+	}
+	return position_status > 0 && position_status !== false ? true : false;
 }
