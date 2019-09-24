@@ -10,6 +10,7 @@ var open_position_interval = 0;
 var open_position_price = 0;
 var slicing_hour = [];
 var warning_active = false;
+var ticks_differences = [];
 
 //var tool_ = "BTCUSD";
 var tool_ = "NDAQ100";
@@ -101,19 +102,19 @@ function update_db() {
 			}
 		}
 
-		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
-			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
-
-			var xhttp = new XMLHttpRequest();
-			xhttp.onreadystatechange = function() {
-				if ( this.readyState == 4 && this.status == 200 ) {
-					console.log( this.response );
-				}
-			};
-			xhttp.open( "POST", host_url, true );
-			xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-			xhttp.send( "action=store_data&last_hour="+ last_hour_info +"&name="+ tools_[ tool_ ].clean_tool_name );
-		}
+		// if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
+		// 	last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
+		//
+		// 	var xhttp = new XMLHttpRequest();
+		// 	xhttp.onreadystatechange = function() {
+		// 		if ( this.readyState == 4 && this.status == 200 ) {
+		// 			console.log( this.response );
+		// 		}
+		// 	};
+		// 	xhttp.open( "POST", host_url, true );
+		// 	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
+		// 	xhttp.send( "action=store_data&last_hour="+ last_hour_info +"&name="+ tools_[ tool_ ].clean_tool_name );
+		// }
 	}
 }
 
@@ -152,7 +153,6 @@ function calculate_prices() {
 
 	// Set minutes and seconds into the slicing hour
 	slicing_minute_key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() + '' + today.getMinutes() );
-	slicing_second_Key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() + '' + today.getMinutes() + '' + today.getSeconds() );
 
 	if ( typeof( slicing_hour[ slicing_minute_key ] ) === "undefined" ) {
 		// If it's a new minute reset the warning
@@ -249,6 +249,7 @@ function execute_position( type = "", action ) {
 			position_type = "";
 			open_position_price = 0;
 			warning_active = true;
+			ticks_differences = [];
 		}
 
 	}
@@ -258,16 +259,22 @@ function take_profit() {
 	let hour_ = hour_prices[ current_key ];
 	let minute_ = slicing_hour[ current_minute_key ];
 
+	// Execute Take Profit
 	if ( is_profit() ) {
-		if ( position_type == "sell" ) {
-			if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
-				execute_position( "", "close" );
-			}
-		} else if ( position_type == "buy" ) {
-			if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
-				execute_position( "", "close" );
-			}
-		}
+		ticks_differences.push( minute_.actual - open_position_price );
+
+		// Take Profit based on tick stability
+		if ( !is_stable( ticks, minute_.actual ) ) { execute_position( "", "close" ); }
+
+		// if ( position_type == "sell" ) {
+		// 	if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+		// 		execute_position( "", "close" );
+		// 	}
+		// } else if ( position_type == "buy" ) {
+		// 	if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
+		// 		execute_position( "", "close" );
+		// 	}
+		// }
 	}
 }
 
@@ -291,4 +298,18 @@ function is_profit() {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
 	}
 	return position_status > 0 && position_status !== false ? true : false;
+}
+
+function is_stable( ticks, current_tick ) {
+	stability = 0;
+
+	for ( let count = 0; count < ticks.length; count++ ) {
+		if ( position_type == "sell" ) {
+			stability = current_tick < ticks[ count ] ? stability + 1 : ( current_tick > ticks[ count ] ? stability - 1 : stability );
+		} else if ( position_type == "buy" ) {
+			stability = current_tick > ticks[ count ] ? stability + 1 : ( current_tick < ticks[ count ] ? stability - 1 : stability );
+		}
+	}
+
+	return stability >= 0 ? true : false;
 }
