@@ -10,7 +10,8 @@ var open_position_interval = 0;
 var open_position_price = 0;
 var slicing_hour = [];
 var warning_active = false;
-var ticks_differences = [];
+var ticks_ = [];
+var ticks_in_minute = [];
 
 //var tool_ = "BTCUSD";
 var tool_ = "NDAQ100";
@@ -71,7 +72,7 @@ function start_trading() {
 
 		//TODO: today_day != 0 && today_day != 6 - Revert for NDAQ100
 
-		if ( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН" ) {
+		if ( is_market_open() ) {
 			calculate_prices();
 			current_time = today;
 		}
@@ -126,8 +127,8 @@ function calculate_prices() {
 	// Send Price info to the Server
 	update_db();
 
-	sell_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell' ).innerText );
-	buy_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy' ).innerText );
+	sell_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell .integer-value' ).innerText.replace( ' ', "" ) + document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell .decimal-value' ).innerText.replace( ' ', "" ) );
+	buy_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy .integer-value' ).innerText.replace( ' ', "" ) + document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy .decimal-value' ).innerText.replace( ' ', "" ) );
 
 	key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() );
 	calculation_time = today.getFullYear() + '-' + ( today.getMonth() + 1 ) + '-' + today.getDate() + ' ' + today.getHours();
@@ -158,6 +159,9 @@ function calculate_prices() {
 		// If it's a new minute reset the warning
 		warning_active = false;
 
+		// If it's a new minute reset ticks
+		ticks_in_minute = [];
+
 		slicing_hour[ slicing_minute_key ] = {
 			opening : sell_price,
 			sell : sell_price,
@@ -173,6 +177,9 @@ function calculate_prices() {
 		slicing_hour[ slicing_minute_key ].highest_price = sell_price > slicing_hour[ slicing_minute_key ].highest_price ? sell_price : slicing_hour[ slicing_minute_key ].highest_price;
 		slicing_hour[ slicing_minute_key ].lowest_price = sell_price < slicing_hour[ slicing_minute_key ].lowest_price ? sell_price : slicing_hour[ slicing_minute_key ].lowest_price;
 	}
+
+	// Collect ticks in the minute
+	if ( ticks_in_minute.indexOf( slicing_hour[ slicing_minute_key ].actual ) == -1 ) { ticks_in_minute.push( slicing_hour[ slicing_minute_key ].actual ); }
 
 //**** Prepare Action Execution ****//
 
@@ -204,13 +211,19 @@ function slice_action() {
 	let hour_ = hour_prices[ current_key ];
 	let minute_ = slicing_hour[ current_minute_key ];
 
-	// Find hour direction
+	// Find hour direction	
 	if ( minute_.opening > minute_.actual ) { // Negative
-		if ( minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement ) {
+		if (
+			is_hour_in_direction( "sell" ) &&
+			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement
+		) {
 			execute_position( "sell", "open" );
 		}
 	} else if ( minute_.opening < minute_.actual )  { // Positive
-		if ( minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement ) {
+		if (
+			is_hour_in_direction( "buy" ) &&
+			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement
+		) {
 			execute_position( "buy", "open" );
 		}
 	}
@@ -236,8 +249,13 @@ function execute_position( type = "", action ) {
 		position_type = type;
 
 		open_position_interval = setInterval( function(){
-			take_profit();
-			stop_loss();
+			if (
+				is_market_open() &&
+				is_opened_position
+			) {
+				take_profit();
+				stop_loss();
+			}
 		}, 500 );
 
 	} else { // Position was opened already
@@ -249,7 +267,7 @@ function execute_position( type = "", action ) {
 			position_type = "";
 			open_position_price = 0;
 			warning_active = true;
-			ticks_differences = [];
+			ticks_ = [];
 		}
 
 	}
@@ -261,10 +279,10 @@ function take_profit() {
 
 	// Execute Take Profit
 	if ( is_profit() ) {
-		ticks_differences.push( minute_.actual - open_position_price );
+		ticks_.push( minute_.actual );
 
 		// Take Profit based on tick stability
-		if ( !is_stable( ticks, minute_.actual ) ) { execute_position( "", "close" ); }
+		if ( !is_stable( ticks_, minute_.actual ) ) { execute_position( "", "close" ); }
 
 		// if ( position_type == "sell" ) {
 		// 	if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
@@ -293,23 +311,49 @@ function stop_loss() {
 }
 
 function is_profit() {
-	position_status = false;
+	let position_status = false;
 	if ( is_opened_position == true ) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
 	}
 	return position_status > 0 && position_status !== false ? true : false;
 }
 
-function is_stable( ticks, current_tick ) {
-	stability = 0;
+function is_stable( ticks, current_tick, type = "" ) {
+	let stability = 0;
+	type = type.length == 0 ? position_type : type;
 
 	for ( let count = 0; count < ticks.length; count++ ) {
-		if ( position_type == "sell" ) {
+		if ( type == "sell" ) {
 			stability = current_tick < ticks[ count ] ? stability + 1 : ( current_tick > ticks[ count ] ? stability - 1 : stability );
-		} else if ( position_type == "buy" ) {
+		} else if ( type == "buy" ) {
 			stability = current_tick > ticks[ count ] ? stability + 1 : ( current_tick < ticks[ count ] ? stability - 1 : stability );
 		}
 	}
 
-	return stability >= 0 ? true : false;
+	let stability_percentage = ( stability / ticks.length ) * 100
+
+	return stability_percentage >= 70 ? true : false;
+}
+
+function is_market_open() {
+	return document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН";
+}
+
+function is_hour_in_direction( direction ) {
+	let hour_ = hour_prices[ current_key ];
+	let flag = false;
+
+	if (
+		direction == "sell" &&
+		hour_.opening > hour_.actual
+	) {
+		flag = true;
+	} else if (
+		direction == "buy" &&
+		hour_.opening < hour_.actual
+	) {
+		flag = true;
+	}
+
+	return flag;
 }

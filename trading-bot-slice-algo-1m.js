@@ -1,3 +1,31 @@
+/*
+*	Agenda:
+*	1) OPM - Opening Position Move
+*	2) TPM - Take Profit Move
+*	3) SLM - Stop Loss Move
+*
+*	Penetration Test No1: 25.09.2019 - Successful
+*	Overall profit in the test: 5.38%
+*	Initial deposit: 1000 BGN
+*	OPM: 10
+*	TPM: 5
+*	SLM: 50
+*	TPI && SLI: 500 miliseconds
+*	Bug report + Fixes:
+*	-	NULL caused by too fast TP Action and call of the is_profit() method before actual opened position in the platform.
+*	-	TP && SL reporting added upon taken action.
+*
+*	Penetration Test No2: 26.09.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 1000 BGN
+*	OPM: 8
+*	TPM: 3
+*	SLM: 10
+*	TPI && SLI: 1000 miliseconds
+*	Bug report + Fixes:
+*/
+
+
 var host_url = "https://geronikolov.com/wp-admin/admin-ajax.php";
 var current_time = new Date();
 var hour_prices = [];
@@ -25,9 +53,9 @@ var tools_ = {
 	"NDAQ100" : {
 		clean_tool_name : "NDAQ100",
 		trader_tool_name : "$NDAQ100",
-		opening_position_movement : 10,
-		take_profit_movement : 5,
-		stop_loss_movement : 50
+		opening_position_movement : 8,
+		take_profit_movement : 3,
+		stop_loss_movement : 10
 	}
 };
 
@@ -70,7 +98,7 @@ function start_trading() {
 
 		//TODO: today_day != 0 && today_day != 6 - Revert for NDAQ100
 
-		if ( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН" ) {
+		if ( is_market_open() ) {
 			calculate_prices();
 			current_time = today;
 		}
@@ -125,8 +153,8 @@ function calculate_prices() {
 	// Send Price info to the Server
 	update_db();
 
-	sell_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell' ).innerText );
-	buy_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy' ).innerText );
+	sell_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell .integer-value' ).innerText.replace( ' ', "" ) + document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-sell .decimal-value' ).innerText.replace( ' ', "" ) );
+	buy_price = parseFloat( document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy .integer-value' ).innerText.replace( ' ', "" ) + document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .tradebox-price-buy .decimal-value' ).innerText.replace( ' ', "" ) );
 
 	key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() );
 	calculation_time = today.getFullYear() + '-' + ( today.getMonth() + 1 ) + '-' + today.getDate() + ' ' + today.getHours();
@@ -206,11 +234,17 @@ function slice_action() {
 
 	// Find hour direction
 	if ( minute_.opening > minute_.actual ) { // Negative
-		if ( minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement ) {
+		if (
+			is_hour_in_direction( "sell" ) &&
+			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement
+		) {
 			execute_position( "sell", "open" );
 		}
 	} else if ( minute_.opening < minute_.actual )  { // Positive
-		if ( minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement ) {
+		if (
+			is_hour_in_direction( "buy" ) &&
+			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement
+		) {
 			execute_position( "buy", "open" );
 		}
 	}
@@ -236,9 +270,14 @@ function execute_position( type = "", action ) {
 		position_type = type;
 
 		open_position_interval = setInterval( function(){
-			take_profit();
-			stop_loss();
-		}, 500 );
+			if (
+				is_market_open() &&
+				is_opened_position
+			) {
+				take_profit();
+				stop_loss();
+			}
+		}, 1000 );
 
 	} else { // Position was opened already
 
@@ -262,10 +301,12 @@ function take_profit() {
 		if ( position_type == "sell" ) {
 			if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
 				execute_position( "", "close" );
+				console.log( "TP: "+ current_key );
 			}
 		} else if ( position_type == "buy" ) {
 			if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
 				execute_position( "", "close" );
+				console.log( "TP: "+ current_key );
 			}
 		}
 	}
@@ -277,18 +318,46 @@ function stop_loss() {
 	if ( position_type == "sell" ) {
 		if ( hour_.actual - open_position_price >= tools_[ tool_ ].stop_loss_movement ) {
 			execute_position( "", "close" );
+			console.log( "SL: "+ current_key );
 		}
 	} else if ( position_type == "buy" ) {
 		if ( open_position_price - hour_.actual >= tools_[ tool_ ].stop_loss_movement ) {
 			execute_position( "", "close" );
+			console.log( "SL: "+ current_key );
 		}
 	}
 }
 
 function is_profit() {
-	position_status = false;
-	if ( is_opened_position == true ) {
+	let position_status = false;
+	if (
+		is_opened_position == true &&
+		document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ) !== null
+	) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
 	}
 	return position_status > 0 && position_status !== false ? true : false;
+}
+
+function is_market_open() {
+	return document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН";
+}
+
+function is_hour_in_direction( direction ) {
+	let hour_ = hour_prices[ current_key ];
+	let flag = false;
+
+	if (
+		direction == "sell" &&
+		hour_.opening > hour_.actual
+	) {
+		flag = true;
+	} else if (
+		direction == "buy" &&
+		hour_.opening < hour_.actual
+	) {
+		flag = true;
+	}
+
+	return flag;
 }
