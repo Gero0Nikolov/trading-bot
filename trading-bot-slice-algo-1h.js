@@ -189,23 +189,28 @@ function execute_position( type = "", action ) {
 	if (
 		document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"]' ) == null &&
 		is_opened_position == false &&
-		action == "open"
+		action == "open" &&
 	) { // No positions
 
-		if ( type == "sell" && action == "open" ) { // Open SELL Position
-			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
-		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
-			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+		if (
+			today_day != 5 ||
+			( today_day == 5 && current_hour < 20 )
+		) {
+			if ( type == "sell" && action == "open" ) { // Open SELL Position
+				document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
+			} else if ( type == "buy" && action == "open" ) { // Open BUY Position
+				document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
+			}
+
+			open_position_price = hour_prices[ current_key ].actual;
+			is_opened_position = true;
+			position_type = type;
+
+			open_position_interval = setInterval( function(){
+				take_profit();
+				stop_loss();
+			}, 1000 );
 		}
-
-		open_position_price = hour_prices[ current_key ].actual;
-		is_opened_position = true;
-		position_type = type;
-
-		open_position_interval = setInterval( function(){
-			take_profit();
-			stop_loss();
-		}, 1000 );
 
 	} else { // Position was opened already
 

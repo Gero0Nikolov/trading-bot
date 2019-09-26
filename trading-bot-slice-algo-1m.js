@@ -15,12 +15,22 @@
 *	-	NULL caused by too fast TP Action and call of the is_profit() method before actual opened position in the platform.
 *	-	TP && SL reporting added upon taken action.
 *
-*	Penetration Test No2: 26.09.2019 -
-*	Overall profit in the test:
+*	Penetration Test No2: 26.09.2019 - Failed
+*	Overall profit in the test: -1.11%
 *	Initial deposit: 1000 BGN
 *	OPM: 8
 *	TPM: 3
 *	SLM: 10
+*	TPI && SLI: 1000 miliseconds
+*	Bug report + Fixes:
+*	-	Too low OPM and SLM.
+*
+*	Penetration Test No3: 27.09.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 1000 BGN
+*	OPM: 10
+*	TPM: 3
+*	SLM: 50
 *	TPI && SLI: 1000 miliseconds
 *	Bug report + Fixes:
 */
@@ -53,9 +63,9 @@ var tools_ = {
 	"NDAQ100" : {
 		clean_tool_name : "NDAQ100",
 		trader_tool_name : "$NDAQ100",
-		opening_position_movement : 8,
+		opening_position_movement : 10,
 		take_profit_movement : 3,
-		stop_loss_movement : 10
+		stop_loss_movement : 50
 	}
 };
 
