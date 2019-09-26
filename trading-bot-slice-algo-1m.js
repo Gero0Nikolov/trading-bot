@@ -31,7 +31,7 @@
 *	OPM: 10
 *	TPM: 3
 *	SLM: 50
-*	TPI && SLI: 1000 miliseconds
+*	TPI && SLI: 100 miliseconds
 *	Bug report + Fixes:
 *	-	OPM and SLM returned to 10 and 50
 *	-	Opening of positions on Friday is possible only before 20 o'clock
@@ -114,7 +114,7 @@ function start_trading() {
 			calculate_prices();
 			current_time = today;
 		}
-	}, 500 );
+	}, 100 );
 }
 
 function update_db() {
@@ -293,7 +293,7 @@ function execute_position( type = "", action ) {
 					take_profit();
 					stop_loss();
 				}
-			}, 1000 );
+			}, 100 );
 		}
 
 	} else { // Position was opened already
