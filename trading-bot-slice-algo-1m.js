@@ -25,8 +25,8 @@
 *	Bug report + Fixes:
 *	-	Too low OPM and SLM.
 *
-*	Penetration Test No3: 27.09.2019 -
-*	Overall profit in the test:
+*	Penetration Test No3: 27.09.2019 - Successful
+*	Overall profit in the test: 5.43%
 *	Initial deposit: 1000 BGN
 *	OPM: 10
 *	TPM: 3
