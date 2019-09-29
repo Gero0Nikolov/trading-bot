@@ -35,6 +35,19 @@
 *	Bug report + Fixes:
 *	-	OPM and SLM returned to 10 and 50
 *	-	Opening of positions on Friday is possible only before 20 o'clock
+*
+*	Penetration Test No4: 30.09.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 1000 BGN
+*	OPM: 10
+*	TPM: 3
+*	SLM: 50
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	Processes optimization.
+*	-	Removed the TP and SL interval and added the actions directly to the LOOP.
+*	-	Auto reload of the page on 24 hours intreval.
+*	-	Auto updater of the DB updated to check if hour update request already exists.
 */
 
 
@@ -46,10 +59,10 @@ var current_key;
 var current_minute_key;
 var is_opened_position = false;
 var position_type = "";
-var open_position_interval = 0;
 var open_position_price = 0;
 var slicing_hour = [];
 var warning_active = false;
+var reload_source = false;
 
 //var tool_ = "BTCUSD";
 var tool_ = "NDAQ100";
@@ -113,6 +126,12 @@ function start_trading() {
 		if ( is_market_open() ) {
 			calculate_prices();
 			current_time = today;
+		} else if (
+			!is_market_open() &&
+			( today.getHours() == 0 && today.getMinutes() == 0 && today.getSeconds() == 0 )
+		) {
+			reload_source = true;
+			update_db();
 		}
 	}, 100 );
 }
@@ -147,7 +166,8 @@ function update_db() {
 			var xhttp = new XMLHttpRequest();
 			xhttp.onreadystatechange = function() {
 				if ( this.readyState == 4 && this.status == 200 ) {
-					console.log( this.response );
+					if ( !reload_source ) { console.log( this.response ); }
+					else { window.location.reload( true ); }
 				}
 			};
 			xhttp.open( "POST", host_url, true );
@@ -192,7 +212,6 @@ function calculate_prices() {
 
 	// Set minutes and seconds into the slicing hour
 	slicing_minute_key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() + '' + today.getMinutes() );
-	slicing_second_Key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() + '' + today.getMinutes() + '' + today.getSeconds() );
 
 	if ( typeof( slicing_hour[ slicing_minute_key ] ) === "undefined" ) {
 		// If it's a new minute reset the warning
@@ -236,12 +255,20 @@ function calculate_prices() {
 	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).click();
 	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] .list_qty div[data-value="'+ middle_purchase_option_value +'"]' ).click();
 
-//**** BUY || SELL Action ****//
-	slice_action();
+//**** OP || TP || SL ****//
+	if ( !is_opened_position ) {
+		//**** BUY || SELL Action ****//
+		slice_action();
+	} else {
+		if ( is_profit() ) { // Position is opened already, listen for TP moments.
+			take_profit();
+		} else { // Position is opened already, but it's not a winnign one. Listen for SL moments.
+			stop_loss();
+		}
+	}
 }
 
 function slice_action() {
-	let hour_ = hour_prices[ current_key ];
 	let minute_ = slicing_hour[ current_minute_key ];
 
 	// Find hour direction
@@ -284,23 +311,12 @@ function execute_position( type = "", action ) {
 			open_position_price = hour_prices[ current_key ].actual;
 			is_opened_position = true;
 			position_type = type;
-
-			open_position_interval = setInterval( function(){
-				if (
-					is_market_open() &&
-					is_opened_position
-				) {
-					take_profit();
-					stop_loss();
-				}
-			}, 100 );
 		}
 
 	} else { // Position was opened already
 
 		if ( action == "close" && is_opened_position == true ) { // Close Position
 			document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="close"]' ).click();
-			clearInterval( open_position_interval );
 			is_opened_position = false;
 			position_type = "";
 			open_position_price = 0;
@@ -311,7 +327,6 @@ function execute_position( type = "", action ) {
 }
 
 function take_profit() {
-	let hour_ = hour_prices[ current_key ];
 	let minute_ = slicing_hour[ current_minute_key ];
 
 	if ( is_profit() ) {
@@ -357,7 +372,7 @@ function is_profit() {
 }
 
 function is_market_open() {
-	return document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН";
+	return document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ) != null && document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).innerText != "ПАЗАРЪТ Е ЗАТВОРЕН";
 }
 
 function is_hour_in_direction( direction ) {
