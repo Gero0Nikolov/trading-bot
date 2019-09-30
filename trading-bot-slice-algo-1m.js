@@ -40,7 +40,7 @@
 *	Overall profit in the test:
 *	Initial deposit: 1000 BGN
 *	OPM: 10
-*	TPM: 3
+*	TPM: 1.5
 *	SLM: 50
 *	TPI && SLI: 100 miliseconds
 *	Bug report + Fixes:
@@ -79,7 +79,7 @@ var tools_ = {
 		clean_tool_name : "NDAQ100",
 		trader_tool_name : "$NDAQ100",
 		opening_position_movement : 10,
-		take_profit_movement : 3,
+		take_profit_movement : 1.5,
 		stop_loss_movement : 50
 	}
 };
