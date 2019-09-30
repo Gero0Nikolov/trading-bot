@@ -36,8 +36,8 @@
 *	-	OPM and SLM returned to 10 and 50
 *	-	Opening of positions on Friday is possible only before 20 o'clock
 *
-*	Penetration Test No4: 30.09.2019 -
-*	Overall profit in the test:
+*	Penetration Test No4: 30.09.2019 - Successful
+*	Overall profit in the test: 0.035% (Reason: No market movements + a little bug in the After Weekend trading time on Monday night algo trading)
 *	Initial deposit: 1000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -48,6 +48,18 @@
 *	-	Removed the TP and SL interval and added the actions directly to the LOOP.
 *	-	Auto reload of the page on 24 hours intreval.
 *	-	Auto updater of the DB updated to check if hour update request already exists.
+*
+*	Penetration Test No5: 01.10.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 1000 BGN
+*	OPM: 10
+*	TPM: 1.5
+*	SLM: 50
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	BUG: After weekend opening hour confuses the if there is a big movement in the direction of the market from Friday.
+*	-	FIX: Check if there is a GAP between the Last Friday price and the opening price on Monday Night. If there is GAP make slicing decision based on it's direction.
+*	-	FIX: Set GAP to 0 after the first hour on Monday Night trading hours.
 */
 
 
@@ -63,6 +75,8 @@ var open_position_price = 0;
 var slicing_hour = [];
 var warning_active = false;
 var reload_source = false;
+var last_friday_price = false;
+var gap_direction = 0;
 
 //var tool_ = "BTCUSD";
 var tool_ = "NDAQ100";
@@ -132,6 +146,12 @@ function start_trading() {
 		) {
 			reload_source = true;
 			update_db();
+		} else if (
+			!is_market_open() &&
+			today.getDay() == 1 &&
+			( today.getHours() == 0 && today.getMinutes() == 1 && today.getSeconds() == 0 )
+		) {
+			get_last_friday_price();
 		}
 	}, 100 );
 }
@@ -174,6 +194,9 @@ function update_db() {
 			xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
 			xhttp.send( "action=store_data&last_hour="+ last_hour_info +"&name="+ tools_[ tool_ ].clean_tool_name );
 		}
+
+		// Reset GAP if there was
+		if ( gap_direction != 0 && today.getDay() == 1 && today.getHours() == 2 ) { gap_direction = 0; }
 	}
 }
 
@@ -257,6 +280,16 @@ function calculate_prices() {
 
 //**** OP || TP || SL ****//
 	if ( !is_opened_position ) {
+		if (
+			today.getDay() == 1 && today.getHours() == 1 &&
+			last_friday_price !== false
+		) { // Check if there is a GAP between the last Friday price and the current opening price
+			if ( gap_direction == 0 ) {
+				gap_direction = hour_prices[ current_key ].opening_price > last_friday_price ? 1 : ( hour_prices[ current_key ].opening_price < last_friday_price ? -1 : 0 );
+				last_friday_price = false;
+			}
+		}
+
 		//**** BUY || SELL Action ****//
 		slice_action();
 	} else {
@@ -275,14 +308,16 @@ function slice_action() {
 	if ( minute_.opening > minute_.actual ) { // Negative
 		if (
 			is_hour_in_direction( "sell" ) &&
-			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement
+			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement &&
+			gap_direction != -1
 		) {
 			execute_position( "sell", "open" );
 		}
 	} else if ( minute_.opening < minute_.actual )  { // Positive
 		if (
 			is_hour_in_direction( "buy" ) &&
-			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement
+			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement &&
+			gap_direction != 1
 		) {
 			execute_position( "buy", "open" );
 		}
@@ -392,4 +427,21 @@ function is_hour_in_direction( direction ) {
 	}
 
 	return flag;
+}
+
+function get_last_friday_price() {
+	var xhttp = new XMLHttpRequest();
+	xhttp.onreadystatechange = function() {
+		if ( this.readyState == 4 && this.status == 200 ) {
+			if ( this.response !== undefined ) {
+				response = JSON.parse( this.response );
+				if ( response !== false ) {
+					last_friday_price = response;
+				}
+			}
+		}
+	};
+	xhttp.open( "POST", host_url, true );
+	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
+	xhttp.send( "action=get_last_friday_price" );
 }
