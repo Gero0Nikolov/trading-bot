@@ -49,8 +49,8 @@
 *	-	Auto reload of the page on 24 hours intreval.
 *	-	Auto updater of the DB updated to check if hour update request already exists.
 *
-*	Penetration Test No5: 01.10.2019 -
-*	Overall profit in the test:
+*	Penetration Test No5: 01.10.2019 - Successful
+*	Overall profit in the test: 2.2%
 *	Initial deposit: 1000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -60,6 +60,19 @@
 *	-	BUG: After weekend opening hour confuses the if there is a big movement in the direction of the market from Friday.
 *	-	FIX: Check if there is a GAP between the Last Friday price and the opening price on Monday Night. If there is GAP make slicing decision based on it's direction.
 *	-	FIX: Set GAP to 0 after the first hour on Monday Night trading hours.
+*
+*	Penetration Test No6: 02.10.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 1000 BGN
+*	OPM: 10
+*	TPM: 1.5
+*	SLM: 50
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	BUG: Auto refresh with opened position triggers loss in the memmory which leads to a big loss and uncontrolled trades.
+*	-	FIX: Don't perform auto refresh if there is an opened position.
+*	-	BUG: Auto refresh and the following DB update causes multiplication of the hours.
+*	- 	FIX: Server side - DON'T add existing hours.
 */
 
 
@@ -144,8 +157,10 @@ function start_trading() {
 			!is_market_open() &&
 			( today.getHours() == 0 && today.getMinutes() == 0 && today.getSeconds() == 0 )
 		) {
-			reload_source = true;
-			update_db();
+			if ( !is_opened_position ) {
+				reload_source = true;
+				update_db();
+			}
 		} else if (
 			!is_market_open() &&
 			today.getDay() == 1 &&
