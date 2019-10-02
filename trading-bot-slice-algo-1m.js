@@ -61,8 +61,8 @@
 *	-	FIX: Check if there is a GAP between the Last Friday price and the opening price on Monday Night. If there is GAP make slicing decision based on it's direction.
 *	-	FIX: Set GAP to 0 after the first hour on Monday Night trading hours.
 *
-*	Penetration Test No6: 02.10.2019 -
-*	Overall profit in the test:
+*	Penetration Test No6: 02.10.2019 - FAILED
+*	Overall profit in the test: -2%
 *	Initial deposit: 1000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -73,6 +73,17 @@
 *	-	FIX: Don't perform auto refresh if there is an opened position.
 *	-	BUG: Auto refresh and the following DB update causes multiplication of the hours.
 *	- 	FIX: Server side - DON'T add existing hours.
+*
+*	Penetration Test No7: 03.10.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 5000 BGN
+*	OPM: 10
+*	TPM: 1.5
+*	SLM: REPLACED WITH DIRACTION MEASUREMENT
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	BUG: Wrong position opening
+*	-	FIX: Inspection of the previous hour to see if there was a big movement lately or not.
 */
 
 
@@ -124,6 +135,7 @@ if ( hour_prices.length == 0 ) {
 						hour_prices[ info_.key ] = {};
 					}
 
+					hour_prices[ info_.key ].opening = parseFloat( info_.opening );
 					hour_prices[ info_.key ].sell = parseFloat( info_.sell );
 					hour_prices[ info_.key ].buy = parseFloat( info_.buy );
 					hour_prices[ info_.key ].actual = parseFloat( info_.actual );
@@ -323,6 +335,7 @@ function slice_action() {
 	if ( minute_.opening > minute_.actual ) { // Negative
 		if (
 			is_hour_in_direction( "sell" ) &&
+			is_previous_hour_in_direction_and_good_mood( "sell" ) &&
 			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != -1
 		) {
@@ -331,6 +344,7 @@ function slice_action() {
 	} else if ( minute_.opening < minute_.actual )  { // Positive
 		if (
 			is_hour_in_direction( "buy" ) &&
+			is_previous_hour_in_direction_and_good_mood( "buy" ) &&
 			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != 1
 		) {
@@ -379,34 +393,32 @@ function execute_position( type = "", action ) {
 function take_profit() {
 	let minute_ = slicing_hour[ current_minute_key ];
 
-	if ( is_profit() ) {
-		if ( position_type == "sell" ) {
-			if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
-				execute_position( "", "close" );
-				console.log( "TP: "+ current_key );
-			}
-		} else if ( position_type == "buy" ) {
-			if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
-				execute_position( "", "close" );
-				console.log( "TP: "+ current_key );
-			}
+	if ( position_type == "sell" ) {
+		if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+			execute_position( "", "close" );
+			console.log( "TP: "+ current_key );
+		}
+	} else if ( position_type == "buy" ) {
+		if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
+			execute_position( "", "close" );
+			console.log( "TP: "+ current_key );
 		}
 	}
 }
 
 function stop_loss() {
-	let hour_ = hour_prices[ current_key ];
-
-	if ( position_type == "sell" ) {
-		if ( hour_.actual - open_position_price >= tools_[ tool_ ].stop_loss_movement ) {
-			execute_position( "", "close" );
-			console.log( "SL: "+ current_key );
-		}
-	} else if ( position_type == "buy" ) {
-		if ( open_position_price - hour_.actual >= tools_[ tool_ ].stop_loss_movement ) {
-			execute_position( "", "close" );
-			console.log( "SL: "+ current_key );
-		}
+	if (
+		position_type == "sell" &&
+		!is_hour_in_direction( "sell" )
+	) {
+		execute_position( "", "close" );
+		console.log( "SL: "+ current_key );
+	} else if (
+		position_type == "buy" &&
+		!is_hour_in_direction( "buy" );
+	) {
+		execute_position( "", "close" );
+		console.log( "SL: "+ current_key );
 	}
 }
 
@@ -439,6 +451,53 @@ function is_hour_in_direction( direction ) {
 		hour_.opening < hour_.actual
 	) {
 		flag = true;
+	}
+
+	return flag;
+}
+
+function is_previous_hour_in_direction_and_good_mood( direction ) {
+	let last_hour_key = false;
+	let current_hour = today.getHours();
+	let count_hours = 0;
+	let last_hour_date = new Date();
+	let flag = false;
+
+	while ( last_hour_key == false ) {
+		count_hours += 1;
+		last_hour_date.setHours( current_hour - count_hours );
+		last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+		if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
+			last_hour_updated = true;
+		}
+	}
+
+	let last_hour = hour_prices[ last_hour_key ];
+
+	if (
+		direction == "sell" &&
+		last_hour.opening > last_hour.actual
+	) {
+		if (
+			last_hour.highest_price - last_hour.lowest_price > 50 &&
+			last_hour.actual - last_hour.lowest_price < last_hour.actual - last_hour.highest_price
+		) {
+			flag = true;
+		} else if ( last_hour.highest_price - last_hour.lowest_price < 50 ) {
+			flag = true;
+		}
+	} else if (
+		direction == "buy" &&
+		last_hour.opening < last_hour.actual
+	) {
+		if (
+			last_hour.highest_price - last_hour.lowest_price > 50 &&
+			last_hour.highest_price - last_hour.actual < last_hour.actual - last_hour.lowest_price
+		) {
+			flag = true;
+		} else if ( last_hour.highest_price - last_hour.lowest_price < 50 ) {
+			flag = true;
+		}
 	}
 
 	return flag;
