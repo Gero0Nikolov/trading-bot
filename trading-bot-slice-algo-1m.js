@@ -415,7 +415,7 @@ function stop_loss() {
 		console.log( "SL: "+ current_key );
 	} else if (
 		position_type == "buy" &&
-		!is_hour_in_direction( "buy" );
+		!is_hour_in_direction( "buy" )
 	) {
 		execute_position( "", "close" );
 		console.log( "SL: "+ current_key );
