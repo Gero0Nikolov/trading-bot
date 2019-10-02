@@ -391,15 +391,30 @@ function execute_position( type = "", action ) {
 }
 
 function take_profit() {
+	// let minute_ = slicing_hour[ current_minute_key ];
+	//
+	// if ( position_type == "sell" ) {
+	// 	if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+	// 		execute_position( "", "close" );
+	// 		console.log( "TP: "+ current_key );
+	// 	}
+	// } else if ( position_type == "buy" ) {
+	// 	if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
+	// 		execute_position( "", "close" );
+	// 		console.log( "TP: "+ current_key );
+	// 	}
+	// }
+
+	// PEN TEST 7 ONLY!
 	let minute_ = slicing_hour[ current_minute_key ];
 
 	if ( position_type == "sell" ) {
-		if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+		if ( minute_.actual > minute_.opening + tools_[ tool_ ].take_profit_movement ) {
 			execute_position( "", "close" );
 			console.log( "TP: "+ current_key );
 		}
 	} else if ( position_type == "buy" ) {
-		if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
+		if ( minute_.actual < minute_.opening + tools_[ tool_ ].take_profit_movement ) {
 			execute_position( "", "close" );
 			console.log( "TP: "+ current_key );
 		}
@@ -407,16 +422,7 @@ function take_profit() {
 }
 
 function stop_loss() {
-	if (
-		position_type == "sell" &&
-		!is_hour_in_direction( "sell" )
-	) {
-		execute_position( "", "close" );
-		console.log( "SL: "+ current_key );
-	} else if (
-		position_type == "buy" &&
-		!is_hour_in_direction( "buy" )
-	) {
+	if ( !is_hour_in_direction( position_type ) ) {
 		execute_position( "", "close" );
 		console.log( "SL: "+ current_key );
 	}
@@ -430,7 +436,7 @@ function is_profit() {
 	) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
 	}
-	return position_status > 0 && position_status !== false ? true : false;
+	return position_status > 3 && position_status !== false ? true : false;
 }
 
 function is_market_open() {
