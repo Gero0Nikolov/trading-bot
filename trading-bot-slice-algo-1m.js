@@ -74,7 +74,7 @@
 *	-	BUG: Auto refresh and the following DB update causes multiplication of the hours.
 *	- 	FIX: Server side - DON'T add existing hours.
 *
-*	Penetration Test No7: 03.10.2019 -
+*	Penetration Test No7: 03.10.2019 - 4.10.2019 -
 *	Overall profit in the test:
 *	Initial deposit: 5000 BGN
 *	OPM: 10
@@ -84,6 +84,7 @@
 *	Bug report + Fixes:
 *	-	BUG: Wrong position opening
 *	-	FIX: Inspection of the previous hour to see if there was a big movement lately or not.
+*	- 	FIX: Allowed trading hours changed to 16:30 - 23:00
 */
 
 
@@ -318,7 +319,13 @@ function calculate_prices() {
 		}
 
 		//**** BUY || SELL Action ****//
-		slice_action();
+		if ( today.getHours() >= 16 && today.getHours() < 23 ) {
+			if ( today.getHours() == 16 && today.getMinutes() > 30 ) {
+				slice_action();
+			} else if ( today.getHours() > 16 ) {
+				slice_action();
+			}
+		}
 	} else {
 		if ( is_profit() ) { // Position is opened already, listen for TP moments.
 			take_profit();
@@ -362,20 +369,15 @@ function execute_position( type = "", action ) {
 		warning_active == false
 	) { // No positions
 
-		if (
-			today_day != 5 ||
-			( today_day == 5 && current_hour < 20 )
-		) {
-			if ( type == "sell" && action == "open" ) { // Open SELL Position
-				document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
-			} else if ( type == "buy" && action == "open" ) { // Open BUY Position
-				document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
-			}
-
-			open_position_price = hour_prices[ current_key ].actual;
-			is_opened_position = true;
-			position_type = type;
+		if ( type == "sell" && action == "open" ) { // Open SELL Position
+			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
+		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
+			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
+
+		open_position_price = hour_prices[ current_key ].actual;
+		is_opened_position = true;
+		position_type = type;
 
 	} else { // Position was opened already
 
