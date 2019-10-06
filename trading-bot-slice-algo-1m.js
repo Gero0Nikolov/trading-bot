@@ -74,8 +74,8 @@
 *	-	BUG: Auto refresh and the following DB update causes multiplication of the hours.
 *	- 	FIX: Server side - DON'T add existing hours.
 *
-*	Penetration Test No7: 03.10.2019 - 4.10.2019 -
-*	Overall profit in the test:
+*	Penetration Test No7: 03.10.2019 - 4.10.2019 - FAILED
+*	Overall profit in the test: -0.34%
 *	Initial deposit: 5000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -85,6 +85,19 @@
 *	-	BUG: Wrong position opening
 *	-	FIX: Inspection of the previous hour to see if there was a big movement lately or not.
 *	- 	FIX: Allowed trading hours changed to 16:30 - 23:00
+*
+*	Penetration Test No8: 07.10.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 5000 BGN
+*	OPM: 10
+*	TPM: 1.5
+*	SLM: 50
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	BUG: Lack of Trend Analysis
+*	-	FIX: Trend Analysis added on every hour
+*	- 	BUG: Lack of Logging
+*	- 	FIX: Added logging on: GAP calculation; TP & SL Actions; Trend Analysis;
 */
 
 
@@ -99,9 +112,11 @@ var position_type = "";
 var open_position_price = 0;
 var slicing_hour = [];
 var warning_active = false;
-var reload_source = false;
-var last_friday_price = false;
+var gap_measured = false;
 var gap_direction = 0;
+var last_hour;
+var trading_started = false;
+var trend_analysis = false;
 
 //var tool_ = "BTCUSD";
 var tool_ = "NDAQ100";
@@ -123,63 +138,19 @@ var tools_ = {
 	}
 };
 
-if ( hour_prices.length == 0 ) {
-	var xhttp = new XMLHttpRequest();
-	xhttp.onreadystatechange = function() {
-		if ( this.readyState == 4 && this.status == 200 ) {
-			result_ = JSON.parse( this.response );
-			if ( result_ != false ) {
-				for ( key in result_ ) {
-					info_ = result_[ key ];
-
-					if ( typeof( hour_prices[ info_.key ] ) === "undefined" ) {
-						hour_prices[ info_.key ] = {};
-					}
-
-					hour_prices[ info_.key ].opening = parseFloat( info_.opening );
-					hour_prices[ info_.key ].sell = parseFloat( info_.sell );
-					hour_prices[ info_.key ].buy = parseFloat( info_.buy );
-					hour_prices[ info_.key ].actual = parseFloat( info_.actual );
-					hour_prices[ info_.key ].highest_price = parseFloat( info_.highest_price );
-					hour_prices[ info_.key ].lowest_price = parseFloat( info_.lowest_price );
-					hour_prices[ info_.key ].date = info_.date;
-				}
-			}
-
-			start_trading();
-		}
-	};
-	xhttp.open( "POST", host_url, true );
-	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-	xhttp.send( "action=get_data&name="+ tools_[ tool_ ].clean_tool_name );
-} else { start_trading(); }
+// Pull data if needed
+if ( hour_prices.length == 0 ) { get_data(); }
 
 function start_trading() {
-	setInterval( function(){
+	trading_started = setInterval( function(){
 		today = new Date();
 		today_day = today.getDay();
 		current_key = parseInt( today.getFullYear() +""+ ( today.getMonth() + 1 ) +""+ today.getDate() +""+ today.getHours() );
 		current_minute_key = parseInt( today.getFullYear() + '' + ( today.getMonth() + 1 ) + '' + today.getDate() + '' + today.getHours() + '' + today.getMinutes() );
 
-		//TODO: today_day != 0 && today_day != 6 - Revert for NDAQ100
-
 		if ( is_market_open() ) {
 			calculate_prices();
 			current_time = today;
-		} else if (
-			!is_market_open() &&
-			( today.getHours() == 0 && today.getMinutes() == 0 && today.getSeconds() == 0 )
-		) {
-			if ( !is_opened_position ) {
-				reload_source = true;
-				update_db();
-			}
-		} else if (
-			!is_market_open() &&
-			today.getDay() == 1 &&
-			( today.getHours() == 0 && today.getMinutes() == 1 && today.getSeconds() == 0 )
-		) {
-			get_last_friday_price();
 		}
 	}, 100 );
 }
@@ -195,27 +166,36 @@ function update_db() {
 		slicing_hour = [];
 
 		warning_active = false;
-		last_hour_updated = false;
-		count_hours = 0;
+		let last_hour_updated = false;
+		let count_hours = 0;
 
 		while ( last_hour_updated == false ) {
 			count_hours += 1;
 			last_hour_date = new Date();
 			last_hour_date.setHours( current_hour - count_hours );
-			last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
+			last_hour_key = praseInt( last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours() );
 			if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
 				last_hour_updated = true;
 			}
 		}
 
-		if ( typeof( hour_prices[ parseInt( last_hour_key ) ] ) !== "undefined" ) {
-			last_hour_info = JSON.stringify( [ hour_prices[ parseInt( last_hour_key ) ] ] );
+		if ( typeof( hour_prices[ last_hour_key ] ) !== "undefined" ) {
+			last_hour = hour_prices[ last_hour_key ];
+			last_hour_info = JSON.stringify( [ hour_prices[ last_hour_key ] ] );
 
 			var xhttp = new XMLHttpRequest();
 			xhttp.onreadystatechange = function() {
 				if ( this.readyState == 4 && this.status == 200 ) {
-					if ( !reload_source ) { console.log( this.response ); }
-					else { window.location.reload( true ); }
+					console.log( this.response );
+
+					// Update Trend Analysis
+					analyse_trend();
+
+					// Check if Source reloading is needed
+					if ( today.getHours() == 1 && today.getMinutes() == 0 && today.getSeconds() == 0 ) {
+						hour_prices = [];
+						get_data();
+					}
 				}
 			};
 			xhttp.open( "POST", host_url, true );
@@ -309,23 +289,20 @@ function calculate_prices() {
 //**** OP || TP || SL ****//
 	if ( !is_opened_position ) {
 		if (
-			today.getDay() == 1 && today.getHours() == 1 &&
-			last_friday_price !== false
+			gap_measured == false &&
+			gap_direction == 0
 		) { // Check if there is a GAP between the last Friday price and the current opening price
-			if ( gap_direction == 0 ) {
-				gap_direction = hour_prices[ current_key ].opening_price > last_friday_price ? 1 : ( hour_prices[ current_key ].opening_price < last_friday_price ? -1 : 0 );
-				last_friday_price = false;
-			}
+			gap_direction = hour_prices[ current_key ].opening_price > last_hour.actual ? 1 : ( hour_prices[ current_key ].opening_price < last_hour.actual ? -1 : 0 );
+			gap_measured = true;
+
+			log( {
+				date : today.getDay() +"-"+ today.getMonth() +"-"+ today.getFullYear() +" "+ today.getHours(),
+				gap_direction : gap_direction
+			}, "gap_calculation" );
 		}
 
 		//**** BUY || SELL Action ****//
-		if ( today.getHours() >= 16 && today.getHours() < 23 ) {
-			if ( today.getHours() == 16 && today.getMinutes() > 30 ) {
-				slice_action();
-			} else if ( today.getHours() > 16 ) {
-				slice_action();
-			}
-		}
+		slice_action();
 	} else {
 		if ( is_profit() ) { // Position is opened already, listen for TP moments.
 			take_profit();
@@ -342,7 +319,7 @@ function slice_action() {
 	if ( minute_.opening > minute_.actual ) { // Negative
 		if (
 			is_hour_in_direction( "sell" ) &&
-			is_previous_hour_in_direction_and_good_mood( "sell" ) &&
+			is_good_trend( "sell" ) &&
 			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != -1
 		) {
@@ -351,7 +328,7 @@ function slice_action() {
 	} else if ( minute_.opening < minute_.actual )  { // Positive
 		if (
 			is_hour_in_direction( "buy" ) &&
-			is_previous_hour_in_direction_and_good_mood( "buy" ) &&
+			is_good_trend( "buy" ) &&
 			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != 1
 		) {
@@ -369,15 +346,15 @@ function execute_position( type = "", action ) {
 		warning_active == false
 	) { // No positions
 
+		open_position_price = hour_prices[ current_key ].actual;
+		is_opened_position = true;
+		position_type = type;
+
 		if ( type == "sell" && action == "open" ) { // Open SELL Position
 			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputSellButtonNode"]' ).click();
 		} else if ( type == "buy" && action == "open" ) { // Open BUY Position
 			document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="inputBuyButtonNode"]' ).click();
 		}
-
-		open_position_price = hour_prices[ current_key ].actual;
-		is_opened_position = true;
-		position_type = type;
 
 	} else { // Position was opened already
 
@@ -393,40 +370,54 @@ function execute_position( type = "", action ) {
 }
 
 function take_profit() {
-	// let minute_ = slicing_hour[ current_minute_key ];
-	//
-	// if ( position_type == "sell" ) {
-	// 	if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
-	// 		execute_position( "", "close" );
-	// 		console.log( "TP: "+ current_key );
-	// 	}
-	// } else if ( position_type == "buy" ) {
-	// 	if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
-	// 		execute_position( "", "close" );
-	// 		console.log( "TP: "+ current_key );
-	// 	}
-	// }
-
-	// PEN TEST 7 ONLY!
 	let minute_ = slicing_hour[ current_minute_key ];
 
 	if ( position_type == "sell" ) {
-		if ( minute_.actual > minute_.opening + tools_[ tool_ ].take_profit_movement ) {
+		if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
 			execute_position( "", "close" );
-			console.log( "TP: "+ current_key );
+
+			log( {
+				type : "Take Profit",
+				direction : "Sell",
+				key : current_key
+			}, "action" );
 		}
 	} else if ( position_type == "buy" ) {
-		if ( minute_.actual < minute_.opening + tools_[ tool_ ].take_profit_movement ) {
+		if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
 			execute_position( "", "close" );
-			console.log( "TP: "+ current_key );
+
+			log( {
+				type : "Take Profit",
+				direction : "Buy",
+				key : current_key
+			}, "action" );
 		}
 	}
 }
 
 function stop_loss() {
-	if ( !is_hour_in_direction( position_type ) ) {
-		execute_position( "", "close" );
-		console.log( "SL: "+ current_key );
+	let hour_ = hour_prices[ current_key ];
+
+	if ( position_type == "sell" ) {
+		if ( hour_.actual - open_position_price >= tools_[ tool_ ].stop_loss_movement ) {
+			execute_position( "", "close" );
+
+			log( {
+				type : "Stop Loss",
+				direction : "Sell",
+				key : current_key
+			}, "action" );
+		}
+	} else if ( position_type == "buy" ) {
+		if ( open_position_price - hour_.actual >= tools_[ tool_ ].stop_loss_movement ) {
+			execute_position( "", "close" );
+
+			log( {
+				type : "Stop Loss",
+				direction : "Buy",
+				key : current_key
+			}, "action" );
+		}
 	}
 }
 
@@ -438,7 +429,7 @@ function is_profit() {
 	) {
 		position_status = parseFloat( document.querySelector( '[data-dojo-attach-point="tableNode"] [data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-column-id="ppl"]' ).innerText );
 	}
-	return position_status > 3 && position_status !== false ? true : false;
+	return position_status >= 10 && position_status !== false ? true : false;
 }
 
 function is_market_open() {
@@ -464,66 +455,119 @@ function is_hour_in_direction( direction ) {
 	return flag;
 }
 
-function is_previous_hour_in_direction_and_good_mood( direction ) {
-	let last_hour_key = false;
-	let current_hour = today.getHours();
-	let count_hours = 0;
-	let last_hour_date = new Date();
+function is_good_trend( direction ) {
 	let flag = false;
 
-	while ( last_hour_key == false ) {
-		count_hours += 1;
-		last_hour_date.setHours( current_hour - count_hours );
-		last_hour_key = last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours();
-		if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
-			last_hour_updated = true;
-		}
-	}
-
-	let last_hour = hour_prices[ last_hour_key ];
-
 	if (
-		direction == "sell" &&
-		last_hour.opening > last_hour.actual
+		(
+			direction == "sell" &&
+			trend_analysis.trend < 0 &&
+			trend_analysis.trend_stability > 0
+		) ||
+		(
+			direction == "buy" &&
+			trend_analysis.trend > 0 &&
+			trend_analysis.trend_stability > 0
+		) ||
+		trend_analysis.big_moves.length == 0
 	) {
-		if (
-			last_hour.highest_price - last_hour.lowest_price > 50 &&
-			last_hour.actual - last_hour.lowest_price < last_hour.actual - last_hour.highest_price
-		) {
-			flag = true;
-		} else if ( last_hour.highest_price - last_hour.lowest_price < 50 ) {
-			flag = true;
-		}
-	} else if (
-		direction == "buy" &&
-		last_hour.opening < last_hour.actual
-	) {
-		if (
-			last_hour.highest_price - last_hour.lowest_price > 50 &&
-			last_hour.highest_price - last_hour.actual < last_hour.actual - last_hour.lowest_price
-		) {
-			flag = true;
-		} else if ( last_hour.highest_price - last_hour.lowest_price < 50 ) {
-			flag = true;
-		}
+		flag = true;
 	}
 
 	return flag;
 }
 
-function get_last_friday_price() {
+function get_data() {
 	var xhttp = new XMLHttpRequest();
 	xhttp.onreadystatechange = function() {
 		if ( this.readyState == 4 && this.status == 200 ) {
-			if ( this.response !== undefined ) {
-				response = JSON.parse( this.response );
-				if ( response !== false ) {
-					last_friday_price = response;
+			result_ = JSON.parse( this.response );
+			if ( result_ != false ) {
+				for ( key in result_ ) {
+					info_ = result_[ key ];
+
+					if ( typeof( hour_prices[ info_.key ] ) === "undefined" ) {
+						hour_prices[ info_.key ] = {};
+					}
+
+					hour_prices[ info_.key ].opening = parseFloat( info_.opening );
+					hour_prices[ info_.key ].sell = parseFloat( info_.sell );
+					hour_prices[ info_.key ].buy = parseFloat( info_.buy );
+					hour_prices[ info_.key ].actual = parseFloat( info_.actual );
+					hour_prices[ info_.key ].highest_price = parseFloat( info_.highest_price );
+					hour_prices[ info_.key ].lowest_price = parseFloat( info_.lowest_price );
+					hour_prices[ info_.key ].date = info_.date;
 				}
+
+				// Get the last known hour
+				last_hour = result_[ 0 ];
+			}
+
+			if ( !trend_analysis ) { analyse_trend(); }
+			if ( !trading_started ) { start_trading(); }
+
+			today = new Date();
+			if ( today.getDay() == 1 ) {
+				gap_measured = false;
+				gap_direction = 0;
 			}
 		}
 	};
 	xhttp.open( "POST", host_url, true );
 	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
-	xhttp.send( "action=get_last_friday_price" );
+	xhttp.send( "action=get_data&name="+ tools_[ tool_ ].clean_tool_name );
+}
+
+function analyse_trend() {
+	var xhttp = new XMLHttpRequest();
+	xhttp.onreadystatechange = function() {
+		if ( this.readyState == 4 && this.status == 200 ) {
+			if ( this.response != "false" ) {
+				trend_analysis = JSON.parse( this.response );
+
+				let today = new Date();
+				log( {
+					date : today.getDay() +"-"+ today.getMonth() +"-"+ today.getFullYear() +" "+ today.getHours(),
+					analys : trend_analysis
+				}, "trend_analys" );
+			}
+		}
+	};
+	xhttp.open( "POST", host_url, true );
+	xhttp.setRequestHeader( "Content-type", "application/x-www-form-urlencoded" );
+	xhttp.send( "action=analyse_trend" );
+}
+
+function log( object, type ) {
+	let log_;
+	if (
+		localStorage.getItem( "log" ) == null ||
+		typeof( localStorage.getItem( "log" ) ) === "undefined"
+	) {
+		log_ = {
+			actions : [],
+			gap_calculations : [],
+			trend_analysis : []
+		};
+	} else {
+		log_ = JSON.parse( localStorage.getItem( "log" ) );
+	}
+
+	if ( type == "action" ) { log_.actions.push( object ); }
+	else if ( type == "gap_calculation" ) { log_.gap_calculation.push( object ); }
+	else if ( type == "trend_analys" ) { log_.trend_analysis.push( object ); }
+
+	localStorage.setItem( "log", JSON.stringify( log_ ) );
+}
+
+function read_log() {
+	result_ = false;
+	if (
+		localStorage.getItem( "log" ) != null &&
+		typeof( localStorage.getItem( "log" ) ) !== "undefined"
+	) {
+		result_ = JSON.parse( localStorage.getItem( "log" ) );
+	}
+	console.log( "=====LOG=====" );
+	console.log( result_ );
 }
