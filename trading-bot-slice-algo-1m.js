@@ -173,7 +173,7 @@ function update_db() {
 			count_hours += 1;
 			last_hour_date = new Date();
 			last_hour_date.setHours( current_hour - count_hours );
-			last_hour_key = praseInt( last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours() );
+			last_hour_key = parseInt( last_hour_date.getFullYear() +""+ ( last_hour_date.getMonth() + 1 ) +""+ last_hour_date.getDate() +""+ last_hour_date.getHours() );
 			if ( typeof ( hour_prices[ last_hour_key ] ) !== "undefined" ) {
 				last_hour_updated = true;
 			}
@@ -458,21 +458,23 @@ function is_hour_in_direction( direction ) {
 function is_good_trend( direction ) {
 	let flag = false;
 
-	if (
-		(
-			direction == "sell" &&
-			trend_analysis.trend < 0 &&
-			trend_analysis.trend_stability > 0
-		) ||
-		(
-			direction == "buy" &&
-			trend_analysis.trend > 0 &&
-			trend_analysis.trend_stability > 0
-		) ||
-		trend_analysis.big_moves.length == 0
-	) {
-		flag = true;
-	}
+	if ( trend_analysis != false ) {
+		if (
+			(
+				direction == "sell" &&
+				trend_analysis.trend < 0 &&
+				trend_analysis.trend_stability > 0
+			) ||
+			(
+				direction == "buy" &&
+				trend_analysis.trend > 0 &&
+				trend_analysis.trend_stability > 0
+			) ||
+			trend_analysis.big_moves.length == 0
+		) {
+			flag = true;
+		}
+	} else { flag = true; }
 
 	return flag;
 }
@@ -554,7 +556,7 @@ function log( object, type ) {
 	}
 
 	if ( type == "action" ) { log_.actions.push( object ); }
-	else if ( type == "gap_calculation" ) { log_.gap_calculation.push( object ); }
+	else if ( type == "gap_calculation" ) { log_.gap_calculations.push( object ); }
 	else if ( type == "trend_analys" ) { log_.trend_analysis.push( object ); }
 
 	localStorage.setItem( "log", JSON.stringify( log_ ) );
