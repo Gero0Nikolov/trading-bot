@@ -86,8 +86,8 @@
 *	-	FIX: Inspection of the previous hour to see if there was a big movement lately or not.
 *	- 	FIX: Allowed trading hours changed to 16:30 - 23:00
 *
-*	Penetration Test No8: 07.10.2019 -
-*	Overall profit in the test:
+*	Penetration Test No8: 07.10.2019 - 08.10.2019 -
+*	Overall profit in the test: 0% -
 *	Initial deposit: 5000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -98,6 +98,8 @@
 *	-	FIX: Trend Analysis added on every hour
 *	- 	BUG: Lack of Logging
 *	- 	FIX: Added logging on: GAP calculation; TP & SL Actions; Trend Analysis;
+*	- 	BUG: Too secured and lack of inverted trend inspection
+*	-	FIX: Inverted trend checkup added
 */
 
 
@@ -319,7 +321,10 @@ function slice_action() {
 	if ( minute_.opening > minute_.actual ) { // Negative
 		if (
 			is_hour_in_direction( "sell" ) &&
-			is_good_trend( "sell" ) &&
+			(
+				is_good_trend( "sell" ) ||
+				is_good_trend( "sell", true ) // Check the inverted trend as well
+			) &&
 			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != -1
 		) {
@@ -328,7 +333,10 @@ function slice_action() {
 	} else if ( minute_.opening < minute_.actual )  { // Positive
 		if (
 			is_hour_in_direction( "buy" ) &&
-			is_good_trend( "buy" ) &&
+			(
+				is_good_trend( "buy" ) ||
+				is_good_trend( "buy", true )
+			) &&
 			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != 1
 		) {
@@ -455,24 +463,41 @@ function is_hour_in_direction( direction ) {
 	return flag;
 }
 
-function is_good_trend( direction ) {
+function is_good_trend( direction, check_inverted = false ) {
 	let flag = false;
 
 	if ( trend_analysis != false ) {
-		if (
-			(
-				direction == "sell" &&
-				trend_analysis.trend < 0 &&
-				trend_analysis.trend_stability > 0
-			) ||
-			(
-				direction == "buy" &&
-				trend_analysis.trend > 0 &&
-				trend_analysis.trend_stability > 0
-			) ||
-			trend_analysis.big_moves.length == 0
-		) {
-			flag = true;
+		if ( !check_inverted ) {
+			if (
+				(
+					direction == "sell" &&
+					trend_analysis.trend < 0 &&
+					trend_analysis.trend_stability > 0
+				) ||
+				(
+					direction == "buy" &&
+					trend_analysis.trend > 0 &&
+					trend_analysis.trend_stability > 0
+				) ||
+				trend_analysis.big_moves.length == 0
+			) {
+				flag = true;
+			}
+		} else if ( check_inverted ) {
+			if (
+				(
+					direction == "sell" &&
+					trend_analysis.trend > 0 &&
+					trend_analysis.trend_stability < 0
+				) ||
+				(
+					direction == "buy" &&
+					trend_analysis.trend < 0 &&
+					trend_analysis.trend_stability < 0
+				)
+			) {
+				flag = true;
+			}
 		}
 	} else { flag = true; }
 
