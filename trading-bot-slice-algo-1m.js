@@ -86,8 +86,8 @@
 *	-	FIX: Inspection of the previous hour to see if there was a big movement lately or not.
 *	- 	FIX: Allowed trading hours changed to 16:30 - 23:00
 *
-*	Penetration Test No8: 07.10.2019 - 08.10.2019 -
-*	Overall profit in the test: 0% -
+*	Penetration Test No8: 07.10.2019 - 08.10.2019 - DRAW
+*	Overall profit in the test: 0% - 7.10; 3.4% - 8.10; -4% - 9.10
 *	Initial deposit: 5000 BGN
 *	OPM: 10
 *	TPM: 1.5
@@ -100,6 +100,19 @@
 *	- 	FIX: Added logging on: GAP calculation; TP & SL Actions; Trend Analysis;
 *	- 	BUG: Too secured and lack of inverted trend inspection
 *	-	FIX: Inverted trend checkup added
+*
+*	Penetration Test No9: 10.10.2019 -
+*	Overall profit in the test:
+*	Initial deposit: 5000 BGN
+*	OPM: 10
+*	TPM: 0.88% Movement //1.5
+*	SLM: 0.66% Movement
+*	TPI && SLI: 100 miliseconds
+*	Bug report + Fixes:
+*	-	BUG: Lack of Risk Analysis
+*	-	FIX: Risk Analysis added: is_risky();
+*	- 	BUG: Lack of Big Movement inspection
+*	- 	FIX: this_hour_is_big() added;
 */
 
 
@@ -282,7 +295,8 @@ function calculate_prices() {
 		}
 	}
 
-	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 4 ) ];
+	// Pick the Max value for Penetration Test No 9;
+	middle_purchase_option_value = purchase_options_list[ parseInt( purchase_options_list.length - 1 ) ];
 
 	// Add Value to input
 	document.querySelector( 'div[data-code="'+ tools_[ tool_ ].trader_tool_name +'"] [data-dojo-attach-point="placeholderNode"]' ).click();
@@ -325,6 +339,8 @@ function slice_action() {
 				is_good_trend( "sell" ) ||
 				is_good_trend( "sell", true ) // Check the inverted trend as well
 			) &&
+			!is_risky( "sell" ) &&
+			!this_hour_is_big() &&
 			minute_.opening - minute_.actual >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != -1
 		) {
@@ -337,6 +353,8 @@ function slice_action() {
 				is_good_trend( "buy" ) ||
 				is_good_trend( "buy", true )
 			) &&
+			!is_risky( "buy" ) &&
+			!this_hour_is_big() &&
 			minute_.actual - minute_.opening >= tools_[ tool_ ].opening_position_movement &&
 			gap_direction != 1
 		) {
@@ -378,10 +396,14 @@ function execute_position( type = "", action ) {
 }
 
 function take_profit() {
-	let minute_ = slicing_hour[ current_minute_key ];
+	let hour_ = hour_prices[ current_key ];
+	let price_difference = 0;
+	let difference_in_percentage = 0;
 
 	if ( position_type == "sell" ) {
-		if ( minute_.actual - minute_.lowest_price >= tools_[ tool_ ].take_profit_movement ) {
+		price_difference = open_position_price - hour_.actual;
+		difference_in_percentage = ( ( price_difference / open_position_price ) * 100 ).toFixed( 2 );
+		if ( difference_in_percentage >= 0.88 ) {
 			execute_position( "", "close" );
 
 			log( {
@@ -391,7 +413,9 @@ function take_profit() {
 			}, "action" );
 		}
 	} else if ( position_type == "buy" ) {
-		if ( minute_.highest_price - minute_.actual >= tools_[ tool_ ].take_profit_movement ) {
+		price_difference = hour_.actual - open_position_price;
+		difference_in_percentage = ( ( price_difference / open_position_price ) * 100 ).toFixed( 2 );
+		if ( difference_in_percentage >= 0.88 ) {
 			execute_position( "", "close" );
 
 			log( {
@@ -405,9 +429,13 @@ function take_profit() {
 
 function stop_loss() {
 	let hour_ = hour_prices[ current_key ];
+	let price_difference = 0;
+	let difference_in_percentage = 0;
 
 	if ( position_type == "sell" ) {
-		if ( hour_.actual - open_position_price >= tools_[ tool_ ].stop_loss_movement ) {
+		price_difference = hour_.actual - open_position_price;
+		difference_in_percentage = ( ( price_difference / open_position_price ) * 100 ).toFixed( 2 );
+		if ( difference_in_percentage >= 0.66 ) {
 			execute_position( "", "close" );
 
 			log( {
@@ -417,7 +445,9 @@ function stop_loss() {
 			}, "action" );
 		}
 	} else if ( position_type == "buy" ) {
-		if ( open_position_price - hour_.actual >= tools_[ tool_ ].stop_loss_movement ) {
+		price_difference = open_position_price - hour_.actual;
+		difference_in_percentage = ( ( price_difference / open_position_price ) * 100 ).toFixed( 2 );
+		if ( difference_in_percentage >= 0.66 ) {
 			execute_position( "", "close" );
 
 			log( {
@@ -500,6 +530,50 @@ function is_good_trend( direction, check_inverted = false ) {
 			}
 		}
 	} else { flag = true; }
+
+	return flag;
+}
+
+function is_risky( direction ) {
+	let flag = false;
+
+	if (
+		trend_analysis != false &&
+		trend_analysis.weak_points.highest != false &&
+		trend_analysis.weak_points.lowest != false
+	) {
+		let hour_ = hour_prices[ current_key ];
+		if ( direction == "sell" ) {
+			price_difference = hour_.actual < trend_analysis.weak_points.lowest ? trend_analysis.weak_points.lowest - hour_.actual : ( hour_.actual > trend_analysis.weak_points.lowest ? hour_.actual - trend_analysis.lowest : 0 );
+
+			if (
+				trend_analysis.trend < 0 &&
+				trend_analysis.trend_stability > 0 &&
+				price_difference <= 10
+			) {
+				flag = true;
+			}
+		} else if ( direction == "buy" ) {
+			price_difference = hour_.actual > trend_analysis.weak_points.highest ? hour_.actual - trend_analysis.weak_points.highest : ( hour_.actual < trend_analysis.weak_points.highest ? trend_analysis.highest - hour_.actual : 0 );
+
+			if (
+				trend_analysis.trend > 0 &&
+				trend_analysis.trend_stability > 0 &&
+				price_difference <= 10
+			) {
+				flag = true;
+			}
+		}
+	}
+
+	return flag;
+}
+
+function this_hour_is_big() {
+	let hour_ = hour_prices[ current_key ];
+	let flag = false;
+
+	if ( hour_.highest_price - hour_.lowest_price >= 25 ) { flag = true; }
 
 	return flag;
 }
