@@ -101,7 +101,7 @@
 *	- 	BUG: Too secured and lack of inverted trend inspection
 *	-	FIX: Inverted trend checkup added
 *
-*	Penetration Test No9: 10.10.2019 -
+*	Penetration Test No9: 10.10.2019 - 11.10.2019 -
 *	Overall profit in the test:
 *	Initial deposit: 5000 BGN
 *	OPM: 10
@@ -111,6 +111,8 @@
 *	Bug report + Fixes:
 *	-	BUG: Lack of Risk Analysis
 *	-	FIX: Risk Analysis added: is_risky();
+*	-	BUG: Risk Analysis was returnin NaN because of undefined variables;
+*	-	FIX: Wrong Object was corrected;
 *	- 	BUG: Lack of Big Movement inspection
 *	- 	FIX: this_hour_is_big() added;
 */
@@ -509,6 +511,7 @@ function is_good_trend( direction, check_inverted = false ) {
 					trend_analysis.trend > 0 &&
 					trend_analysis.trend_stability > 0
 				) ||
+				trend_analysis.trend == 0 ||
 				trend_analysis.big_moves.length == 0
 			) {
 				flag = true;
@@ -518,12 +521,12 @@ function is_good_trend( direction, check_inverted = false ) {
 				(
 					direction == "sell" &&
 					trend_analysis.trend > 0 &&
-					trend_analysis.trend_stability < 0
+					trend_analysis.trend_stability <= 0
 				) ||
 				(
 					direction == "buy" &&
 					trend_analysis.trend < 0 &&
-					trend_analysis.trend_stability < 0
+					trend_analysis.trend_stability <= 0
 				)
 			) {
 				flag = true;
@@ -544,21 +547,21 @@ function is_risky( direction ) {
 	) {
 		let hour_ = hour_prices[ current_key ];
 		if ( direction == "sell" ) {
-			price_difference = hour_.actual < trend_analysis.weak_points.lowest ? trend_analysis.weak_points.lowest - hour_.actual : ( hour_.actual > trend_analysis.weak_points.lowest ? hour_.actual - trend_analysis.lowest : 0 );
+			price_difference = hour_.actual < trend_analysis.weak_points.lowest ? trend_analysis.weak_points.lowest - hour_.actual : ( hour_.actual > trend_analysis.weak_points.lowest ? hour_.actual - trend_analysis.weak_points.lowest : 0 );
 
 			if (
 				trend_analysis.trend < 0 &&
-				trend_analysis.trend_stability > 0 &&
+				trend_analysis.trend_stability >= 0 &&
 				price_difference <= 10
 			) {
 				flag = true;
 			}
 		} else if ( direction == "buy" ) {
-			price_difference = hour_.actual > trend_analysis.weak_points.highest ? hour_.actual - trend_analysis.weak_points.highest : ( hour_.actual < trend_analysis.weak_points.highest ? trend_analysis.highest - hour_.actual : 0 );
+			price_difference = hour_.actual > trend_analysis.weak_points.highest ? hour_.actual - trend_analysis.weak_points.highest : ( hour_.actual < trend_analysis.weak_points.highest ? trend_analysis.weak_points.highest - hour_.actual : 0 );
 
 			if (
 				trend_analysis.trend > 0 &&
-				trend_analysis.trend_stability > 0 &&
+				trend_analysis.trend_stability >= 0 &&
 				price_difference <= 10
 			) {
 				flag = true;
